@@ -1,0 +1,19 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/stages/stage_base.tscn" id="2_stage"]
+[ext_resource type="PackedScene" path="res://scenes/player/player_ship.tscn" id="3_player"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="4_hud"]
+[ext_resource type="PackedScene" path="res://scenes/cutscenes/cutscene_manager.tscn" id="5_cs"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+
+[node name="StageBase" parent="." instance=ExtResource("2_stage")]
+
+[node name="PlayerShip" parent="." instance=ExtResource("3_player")]
+position = Vector2(240, 220)
+
+[node name="HUD" parent="." instance=ExtResource("4_hud")]
+
+[node name="CutsceneManager" parent="." instance=ExtResource("5_cs")]

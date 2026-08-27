@@ -1,0 +1,49 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/stages/stage_1.gd" id="1_stage"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/base_enemy.tscn" id="2_enemy"]
+
+[sub_resource type="RectangleShape2D" id="RectShape"]
+size = Vector2(24, 24)
+
+[node name="Stage1" type="Node2D"]
+script = ExtResource("1_stage")
+stage_id = 1
+
+[node name="ParallaxBackground" type="ParallaxBackground" parent="."]
+
+[node name="FarLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2(1, 0.3)
+
+[node name="FarVisual" type="ColorRect" parent="ParallaxBackground/FarLayer"]
+offset_right = 480.0
+offset_bottom = 810.0
+color = Color(0.04, 0.05, 0.12, 1)
+
+[node name="MidLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2(1, 0.6)
+
+[node name="MidVisual" type="ColorRect" parent="ParallaxBackground/MidLayer"]
+offset_right = 480.0
+offset_bottom = 810.0
+color = Color(0.06, 0.07, 0.16, 1)
+
+[node name="NearLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2(1, 1.0)
+
+[node name="NearVisual" type="ColorRect" parent="ParallaxBackground/NearLayer"]
+offset_right = 480.0
+offset_bottom = 810.0
+color = Color(0.08, 0.09, 0.2, 1)
+
+[node name="PlayerSpawn" type="Marker2D" parent="."]
+position = Vector2(240, 220)
+
+[node name="EnemySpawnPoint1" type="Marker2D" parent="."]
+position = Vector2(120, -30)
+
+[node name="EnemySpawnPoint2" type="Marker2D" parent="."]
+position = Vector2(240, -30)
+
+[node name="EnemySpawnPoint3" type="Marker2D" parent="."]
+position = Vector2(360, -30)
