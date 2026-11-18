@@ -1,9 +1,9 @@
 class_name Projectile
 extends Area2D
 
-## Base projectile for all weapon types.
-## Handles movement, collision, and cleanup.
-## Weapon subclasses or scenes configure speed, damage, and direction.
+## Base projectile for all weapon types (Area2D per docs/plan.md Technical Solutions).
+## Handles movement, collision, sprite fallback and cleanup.
+## Weapon subclasses configure speed, damage and direction before add_child().
 
 # ---- Signals ----
 signal hit(target: Node2D)
@@ -15,12 +15,19 @@ signal hit(target: Node2D)
 @export var lifetime: float = 3.0
 @export var is_player_projectile: bool = true
 
+# "laser" | "missile" | "bomb" — selects optional sprite path set (task-2).
+@export var weapon_kind: String = "laser"
+@export var texture_paths: Array = []
+
 # ---- Internal ----
 var _timer: float = 0.0
+const _OFFSCREEN_MARGIN := 32.0
+const _FALLBACK_SCREEN_SIZE := Vector2(480, 270)
 
 
 func _ready() -> void:
-	# Configure collision layers (bitmask: bit0=player, bit1=player_proj, bit2=enemies, bit3=enemy_proj, bit4=pickups, bit5=environment)
+	# Collision bitmask: bit0=player, bit1=player_proj, bit2=enemies,
+	# bit3=enemy_proj, bit4=pickups, bit5=environment (see project.godot).
 	if is_player_projectile:
 		collision_layer = 2  # player_projectiles (bit 1)
 		collision_mask = 4 | 32  # enemies + environment (bits 2, 5)
@@ -30,12 +37,14 @@ func _ready() -> void:
 		collision_mask = 1  # player (bit 0)
 		add_to_group("enemy_projectile")
 	area_entered.connect(_on_area_entered)
+	_apply_visual()
 
 
 func _physics_process(delta: float) -> void:
 	position += direction * speed * delta
 	_timer += delta
-	if _timer >= lifetime:
+	# Lifetime AND bounds both free shots — no off-screen leaks.
+	if _timer >= lifetime or _is_off_screen():
 		_cleanup()
 
 
@@ -47,3 +56,30 @@ func _on_area_entered(other: Area2D) -> void:
 func _cleanup() -> void:
 	if is_instance_valid(self):
 		queue_free()
+
+
+func _is_off_screen() -> bool:
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		viewport_size = _FALLBACK_SCREEN_SIZE
+	var p := global_position
+	return (p.x < -_OFFSCREEN_MARGIN or p.x > viewport_size.x + _OFFSCREEN_MARGIN
+		or p.y < -_OFFSCREEN_MARGIN or p.y > viewport_size.y + _OFFSCREEN_MARGIN)
+
+
+## Uses the imported projectile sprite when available (task-2), otherwise the
+## scene's FallbackVisual polygon stays visible. Missing assets never error.
+func _apply_visual() -> void:
+	if texture_paths.is_empty():
+		texture_paths = WeaponResources.SPRITE_PATHS.get(weapon_kind, []) as Array
+	var texture := WeaponResources.first_existing(texture_paths) as Texture2D
+	var sprite := get_node_or_null("Visual") as Sprite2D
+	var fallback := get_node_or_null("FallbackVisual") as Node2D
+	if texture != null and sprite != null:
+		sprite.texture = texture
+		sprite.visible = true
+		if fallback != null:
+			fallback.visible = false
+	elif sprite != null:
+		# TODO(task-2): import laser/missile/bomb projectile sprites.
+		sprite.visible = false

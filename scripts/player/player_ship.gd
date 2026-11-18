@@ -1,17 +1,20 @@
 class_name PlayerShip
-class_name PlayerShip
 extends Area2D
 
 ## Player ship controller.
 ## Handles movement, depth (zoom) layers, damage control (hull + shields),
 ## and weapon firing. Based on game_design.md specifications.
 
-const ProjectileScene := preload("res://scenes/weapons/projectile.tscn")
+const LaserProjectileScene := preload("res://scenes/weapons/laser_projectile.tscn")
+const MissileProjectileScene := preload("res://scenes/weapons/missile_projectile.tscn")
+const BombProjectileScene := preload("res://scenes/weapons/bomb_projectile.tscn")
+const _WEAPON_ORDER := ["laser", "missile", "bomb"]
 
 # ---- Signals ----
 signal hull_changed(new_hull: int)
 signal shield_changed(side: String, new_value: int)
 signal depth_changed(new_depth: float)
+signal bomb_ammo_changed(current: int, max_ammo: int)
 signal destroyed
 
 # ---- Exported ----
@@ -88,35 +91,55 @@ func _setup_weapons() -> void:
 		if weapon_node:
 			add_child(weapon_node)
 			_weapons[wname] = weapon_node
+	# Ships without the laser (future loadouts) still get a valid active weapon.
+	if not _weapons.has(_active_weapon) and not _weapons.is_empty():
+		_active_weapon = _weapons.keys()[0]
 
 
+## Cadence values follow game_design.md: rapid laser, slow homing missile,
+## limited bomb. SFX/sprites are resolved by weapon_kind (optional assets).
 func _create_weapon(wname: String) -> Node2D:
-		match wname:
+	var weapon: Weapon
+	match wname:
 		"laser":
-			var laser := Laser.new()
-			laser.fire_rate = 0.12
-			laser.damage = 1
-			laser.projectile_speed = 700.0
-			laser.projectile_scene = ProjectileScene
-			laser.max_level = 3
-			return laser
+			weapon = Laser.new()
+			weapon.fire_rate = 0.12
+			weapon.damage = 1
+			weapon.projectile_speed = 700.0
+			weapon.projectile_lifetime = 1.5
+			weapon.projectile_scene = LaserProjectileScene
+			weapon.weapon_kind = wname
+			weapon.max_level = 3
 		"missile":
-			var missile := Weapon.new()
+			var missile := Missile.new()
 			missile.fire_rate = 0.8
 			missile.damage = 3
 			missile.projectile_speed = 350.0
-			missile.projectile_scene = ProjectileScene
+			missile.projectile_lifetime = 2.5
+			missile.projectile_scene = MissileProjectileScene
+			missile.weapon_kind = wname
+			missile.homing_radius = 280.0
+			missile.turn_rate = 4.5
 			missile.max_level = 3
-			return missile
+			weapon = missile
 		"bomb":
-			var bomb := Weapon.new()
+			var bomb := Bomb.new()
 			bomb.fire_rate = 2.5
 			bomb.damage = 5
 			bomb.projectile_speed = 200.0
-			bomb.projectile_scene = ProjectileScene
+			bomb.projectile_lifetime = 2.0
+			bomb.projectile_scene = BombProjectileScene
+			bomb.weapon_kind = wname
+			bomb.max_ammo = 3
+			bomb.recharge_time = 8.0
+			bomb.bombs_per_drop = 5
+			bomb.explosion_radius = 48.0
 			bomb.max_level = 1
-			return bomb
-	return null
+			bomb.ammo_changed.connect(_on_bomb_ammo_changed)
+			weapon = bomb
+		_:
+			return null
+	return weapon
 
 
 func _process(delta: float) -> void:
@@ -184,11 +207,15 @@ func get_depth() -> float:
 
 # ---- Firing ----
 func _handle_firing() -> void:
+	# Held fire uses the active weapon; each Weapon enforces its own cadence.
 	if Input.is_action_pressed("fire"):
-		_fire_weapon("laser")
+		_fire_weapon(_active_weapon)
+	# Direct-fire shortcuts from the existing skeleton also select that weapon.
 	if Input.is_action_just_pressed("fire_missile") and _weapons.has("missile"):
+		switch_weapon("missile")
 		_fire_weapon("missile")
 	if Input.is_action_just_pressed("fire_bomb") and _weapons.has("bomb"):
+		switch_weapon("bomb")
 		_fire_weapon("bomb")
 
 
@@ -201,18 +228,49 @@ func _fire_weapon(wname: String) -> void:
 
 
 func switch_weapon(wname: String) -> void:
-	if _weapons.has(wname):
-		_active_weapon = wname
+	if not _weapons.has(wname) or _active_weapon == wname:
+		return
+	_active_weapon = wname
+	var weapon: Weapon = _weapons[wname]
+	GameManager.weapon_changed.emit(wname, weapon.current_level)
+
+
+## Cycles through only the weapons this ship actually carries.
+func cycle_weapon(step: int) -> void:
+	var available: Array[String] = []
+	for wname in _WEAPON_ORDER:
+		if _weapons.has(wname):
+			available.append(wname)
+	if available.is_empty():
+		return
+	var index := available.find(_active_weapon)
+	if index < 0:
+		index = 0
+	else:
+		index = wrapi(index + step, 0, available.size())
+	switch_weapon(available[index])
 
 
 func get_active_weapon() -> String:
 	return _active_weapon
 
 
+func get_weapon_ammo(wname: String) -> Dictionary:
+	if not _weapons.has(wname) or not (_weapons[wname] is Bomb):
+		return {}
+	var bomb: Bomb = _weapons[wname]
+	return {"current": bomb.ammo, "max": bomb.max_ammo}
+
+
 func upgrade_weapon(wname: String) -> void:
 	if _weapons.has(wname):
 		var w: Weapon = _weapons[wname]
 		w.upgrade()
+		GameManager.weapon_changed.emit(wname, w.current_level)
+
+
+func _on_bomb_ammo_changed(current: int, max_ammo: int) -> void:
+	bomb_ammo_changed.emit(current, max_ammo)
 
 
 # ---- Damage Control ----
@@ -295,3 +353,16 @@ func _input(event: InputEvent) -> void:
 			GameManager.change_state(GameManager.GameState.PAUSED)
 		elif GameManager.current_state == GameManager.GameState.PAUSED:
 			GameManager.change_state(GameManager.GameState.PLAYING)
+	if GameManager.current_state != GameManager.GameState.PLAYING:
+		return
+	# Weapon switching: cycle with R/T, direct select with 1/2/3.
+	if event.is_action_pressed("next_weapon"):
+		cycle_weapon(1)
+	elif event.is_action_pressed("prev_weapon"):
+		cycle_weapon(-1)
+	elif event.is_action_pressed("select_laser"):
+		switch_weapon("laser")
+	elif event.is_action_pressed("select_missile"):
+		switch_weapon("missile")
+	elif event.is_action_pressed("select_bomb"):
+		switch_weapon("bomb")

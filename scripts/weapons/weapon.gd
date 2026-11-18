@@ -2,8 +2,9 @@ class_name Weapon
 extends Node2D
 
 ## Base weapon class.
-## Manages fire rate cooldown and spawning projectiles.
+## Manages fire-rate cooldown and spawning projectiles (Area2D).
 ## Subclasses override fire() for specific weapon behaviors.
+## Per docs/game_design.md: GDAS-1 carries laser, missile and bomb.
 
 # ---- Signals ----
 signal fired
@@ -16,7 +17,13 @@ signal fired
 @export var projectile_lifetime: float = 3.0
 @export var max_level: int = 3
 
+# "laser" | "missile" | "bomb" — selects optional sprite/SFX path sets.
+@export var weapon_kind: String = "laser"
+@export var sfx_paths: Array = []
+@export var sfx_volume_db: float = -6.0
+
 # ---- Internal ----
+var sfx_stream: AudioStream
 var current_level: int = 1
 var _cooldown: float = 0.0
 var _is_on_cooldown: bool = false
@@ -25,6 +32,10 @@ var _owner_node: Node2D = null
 
 func _ready() -> void:
 	_owner_node = get_parent()
+	if sfx_paths.is_empty():
+		sfx_paths = WeaponResources.SFX_PATHS.get(weapon_kind, []) as Array
+	if sfx_stream == null:
+		sfx_stream = WeaponResources.first_existing(sfx_paths) as AudioStream
 
 
 func _process(delta: float) -> void:
@@ -44,18 +55,62 @@ func fire(direction: Vector2 = Vector2.UP, origin: Vector2 = Vector2.ZERO) -> vo
 	_do_fire(direction, origin)
 	_is_on_cooldown = true
 	_cooldown = fire_rate
+	_play_sfx()
 	fired.emit()
 
 
 func _do_fire(direction: Vector2, origin: Vector2) -> void:
-	var proj: Projectile = projectile_scene.instantiate()
-	proj.direction = direction
+	_spawn_projectile(direction, origin)
+
+
+## Spawns one configured projectile. Subclasses override _configure_projectile()
+## to add weapon-specific behaviour (homing, blast radius, ...).
+func _spawn_projectile(direction: Vector2, origin: Vector2) -> Projectile:
+	if projectile_scene == null:
+		return null
+	var proj := projectile_scene.instantiate() as Projectile
+	if proj == null:
+		push_warning("Weapon: projectile_scene does not instantiate a Projectile")
+		return null
+	# Configure before add_child so _ready() sees the final values.
+	proj.direction = direction.normalized() if direction != Vector2.ZERO else Vector2.UP
 	proj.damage = damage
 	proj.speed = projectile_speed
 	proj.lifetime = projectile_lifetime
 	proj.is_player_projectile = true
+	proj.weapon_kind = weapon_kind
 	proj.global_position = origin
-	_owner_node.get_tree().current_scene.add_child(proj)
+	_configure_projectile(proj)
+	var parent := _projectile_parent()
+	if parent != null:
+		parent.add_child(proj)
+	return proj
+
+
+func _configure_projectile(_proj: Projectile) -> void:
+	pass
+
+
+func _projectile_parent() -> Node:
+	var tree := get_tree()
+	if tree == null:
+		return null
+	# current_scene keeps shots above stage layers; root is a safe fallback
+	# for headless/structural tests where current_scene may be unset.
+	return tree.current_scene if tree.current_scene != null else tree.root
+
+
+## Missing SFX is expected until task-3 assets land — no error, just a TODO.
+func _play_sfx() -> void:
+	if sfx_stream == null:
+		# TODO(task-3): import laser/missile/bomb fire SFX into assets/audio/sfx.
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
+	var manager := tree.root.get_node_or_null("AudioManager")
+	if manager != null and manager.has_method("play_sfx"):
+		manager.call("play_sfx", sfx_stream, sfx_volume_db)
 
 
 func upgrade() -> void:
