@@ -126,3 +126,24 @@ it reports that validation was structural only. Exit code is 0 when all checks p
 ## Development
 
 See `/docs/` in the parent repository for game design, story, script, and plan documents.
+
+## Build and Test
+
+Requires Godot 4.3+ (the headless build is enough) and Python 3.
+
+```bash
+tools/run_all.sh                     # import, asset validators, GDScript suites
+tools/run_all.sh --lint              # also gdlint / gdformat --check (gdtoolkit)
+GODOT_BIN=godot-4.7 tools/run_all.sh # run the same suites against another engine
+
+mkdir -p build/linux
+godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
+```
+
+`tools/run_all.sh` fails on GDScript parse errors, on any `tools/validate_*.py` or
+`tests/validate_*.py` failure, on audio asset validation failures and on any
+`tests/*_test.gd` suite that exits non-zero.
+
+CI (`.github/workflows/ci.yml`) runs the script on Godot 4.3 and 4.7.2, exports
+the Linux build with `export_presets.cfg` and uploads it as an artifact.
+

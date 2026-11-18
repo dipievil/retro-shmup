@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (gdtoolkit)
+    runs-on: ubuntu-latest
+    # Report-only until the existing scripts are clean: see tools/run_all.sh --lint.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install gdtoolkit==4.5.0
+      - run: gdlint scripts
+      - run: gdformat --check scripts
+
+  test:
+    name: Test (Godot ${{ matrix.godot }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 4.3 is the engine pinned in project.godot; 4.7.2 is the current stable.
+        godot: ["4.3", "4.7.2"]
+    container:
+      image: barichello/godot-ci:${{ matrix.godot }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import, validators and test suites
+        run: tools/run_all.sh
+
+  build:
+    name: Build (Linux)
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Export Linux build
+        run: |
+          mkdir -p build/linux
+          godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
+      - name: Smoke test the exported binary
+        run: timeout 60 ./build/linux/retro-shmup.x86_64 --headless --quit-after 120
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retro-shmup-linux
+          path: build/linux/
+          if-no-files-found: error
