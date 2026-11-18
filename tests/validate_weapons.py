@@ -45,12 +45,15 @@ BEHAVIOUR_CHECKS = [
     ("scripts/weapons/weapon.gd", r"func _play_sfx\(\)", "optional SFX hook"),
     ("scripts/weapons/weapon.gd", r"_configure_projectile\(proj\)", "projectile config hook"),
     ("scripts/weapons/projectile.gd", r"extends Area2D", "Area2D projectile"),
+    ("scripts/weapons/projectile.gd", r"var depth: float = 0.5", "projectile carries launch depth"),
+    ("scripts/weapons/weapon.gd", r"proj\.depth = launch_depth", "launch depth copied to projectile"),
     ("scripts/weapons/projectile.gd", r"func _is_off_screen\(\)", "off-screen cleanup"),
     ("scripts/weapons/projectile.gd", r"queue_free\(\)", "free on hit/expiry"),
     ("scripts/weapons/projectile.gd", r"func _apply_visual\(\)", "optional sprite fallback"),
     ("scripts/weapons/missile.gd", r"homing_radius", "missile homing config"),
     ("scripts/weapons/missile_projectile.gd", r'get_nodes_in_group\("enemy"\)', "enemy tracking"),
     ("scripts/weapons/missile_projectile.gd", r"angle_to\(desired\)", "limited turn rate"),
+    ("scripts/weapons/missile_projectile.gd", r"absf\(float\(mine\) - float\(theirs\)\) <= depth_tolerance", "same-layer depth comparison"),
     ("scripts/weapons/bomb.gd", r"max_ammo", "bomb limit"),
     ("scripts/weapons/bomb.gd", r"recharge_time", "bomb cooldown"),
     ("scripts/weapons/bomb.gd", r"func can_fire\(\)", "bomb ammo gate"),
@@ -164,6 +167,48 @@ def check_scene(rel: str, script_hint: str, kind: str) -> None:
         ERRORS.append(f"{rel}: load_steps mismatch (got {steps.group(1)}, want {ext + sub + 1})")
 
 
+def function_body(rel: str, name: str) -> str:
+    """Return one top-level GDScript function body (up to the next func/EOF)."""
+    text = read(rel)
+    match = re.search(rf"^func {re.escape(name)}\(", text, re.M)
+    if not match:
+        ERRORS.append(f"{rel}: missing func {name}()")
+        return ""
+    rest = text[match.end():]
+    next_func = re.search(r"^func\s", rest, re.M)
+    return rest[: next_func.start()] if next_func else rest
+
+
+def check_depth_propagation() -> None:
+    """Godot is unavailable here, so verify the depth data path structurally:
+    owner depth -> projectile, before configuration/add_child, and that homing
+    compares both depths. Without this, the same-layer filter silently no-ops.
+    """
+    spawn = function_body("scripts/weapons/weapon.gd", "_spawn_projectile")
+    if not spawn:
+        return
+    assign = spawn.find("proj.depth")
+    if assign < 0:
+        ERRORS.append("weapon.gd: _spawn_projectile() does not set proj.depth")
+        return
+    for token, label in (("_configure_projectile(proj)", "configure"),
+                         ("add_child(proj)", "add to tree")):
+        idx = spawn.find(token)
+        if idx < 0:
+            ERRORS.append(f"weapon.gd: _spawn_projectile() missing {label}")
+        elif assign > idx:
+            ERRORS.append(f"weapon.gd: depth assigned after {label}")
+
+    resolver = function_body("scripts/weapons/weapon.gd", "_launch_depth")
+    if '"depth" in owner_node' not in resolver:
+        ERRORS.append("weapon.gd: _launch_depth() does not read the owner's depth")
+
+    homing = function_body("scripts/weapons/missile_projectile.gd", "_is_on_same_layer")
+    for token in ('get("depth")', 'other.get("depth")', "depth_tolerance"):
+        if token not in homing:
+            ERRORS.append(f"missile_projectile.gd: layer check missing {token}")
+
+
 def main() -> int:
     for rel in REQUIRED_FILES:
         read(rel)
@@ -198,6 +243,8 @@ def main() -> int:
         text = project_text if rel == "project.godot" else read(rel)
         if not re.search(pattern, text, re.M):
             ERRORS.append(f"{rel}: missing {label} (/{pattern}/)")
+
+    check_depth_propagation()
 
     # Cadence/ordering sanity: laser rapid, missile slower, bomb slowest and
     # capped. This is the closest check to a behaviour test without Godot.

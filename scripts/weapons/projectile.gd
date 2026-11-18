@@ -19,6 +19,11 @@ signal hit(target: Node2D)
 @export var weapon_kind: String = "laser"
 @export var texture_paths: Array = []
 
+# Depth layer the shot was launched from (0 = back, 0.5 = middle, 1 = front).
+# Mirrors PlayerShip/BaseEnemy; homing projectiles use it to stay on their plane.
+# Laser/bomb carry it too but ignore it, so their behaviour is unchanged.
+var depth: float = 0.5
+
 # ---- Internal ----
 var _timer: float = 0.0
 const _OFFSCREEN_MARGIN := 32.0

@@ -57,14 +57,15 @@ func _acquire_target() -> void:
 			target = enemy
 
 
-## Depth layers are a core mechanic (game_design.md): missiles should not chase
-## enemies on another plane. Projectiles do not carry depth yet, so when either
-## node lacks it we fall back to targeting every enemy.
+## Depth layers are a core mechanic (game_design.md): missiles must not chase
+## enemies on another plane. Weapon._spawn_projectile() copies the launcher's
+## depth onto the shot, so both sides normally expose it; the fallback only
+## covers shots built without a launcher (e.g. structural/headless tests).
 func _is_on_same_layer(other: Node2D) -> bool:
 	if not ("depth" in self) or not ("depth" in other):
 		return true
-	var mine := get("depth")
-	var theirs := other.get("depth")
+	var mine: Variant = get("depth")
+	var theirs: Variant = other.get("depth")
 	if not (mine is float or mine is int) or not (theirs is float or theirs is int):
 		return true
 	return absf(float(mine) - float(theirs)) <= depth_tolerance

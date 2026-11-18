@@ -80,6 +80,11 @@ func _spawn_projectile(direction: Vector2, origin: Vector2) -> Projectile:
 	proj.is_player_projectile = true
 	proj.weapon_kind = weapon_kind
 	proj.global_position = origin
+	# Carry the launch layer forward so homing missiles only chase enemies on
+	# the same plane (game_design.md). Set before _configure_projectile/add_child.
+	var launch_depth: Variant = _launch_depth()
+	if launch_depth != null:
+		proj.depth = launch_depth
 	_configure_projectile(proj)
 	var parent := _projectile_parent()
 	if parent != null:
@@ -89,6 +94,22 @@ func _spawn_projectile(direction: Vector2, origin: Vector2) -> Projectile:
 
 func _configure_projectile(_proj: Projectile) -> void:
 	pass
+
+
+## Depth of the node that owns this weapon (the player ship). Returns null when
+## no owner exposes one, leaving the projectile's default depth untouched — this
+## keeps standalone/headless weapons harmless.
+func _launch_depth() -> Variant:
+	var owner_node: Node = _owner_node if _owner_node != null else get_parent()
+	if owner_node == null:
+		return null
+	if "depth" in owner_node:
+		var value: Variant = owner_node.get("depth")
+		if value is float or value is int:
+			return float(value)
+	if owner_node.has_method("get_depth"):
+		return float(owner_node.call("get_depth"))
+	return null
 
 
 func _projectile_parent() -> Node:
