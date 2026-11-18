@@ -1,10 +1,20 @@
 class_name PlayerShip
-class_name PlayerShip
 extends Area2D
 
 ## Player ship controller.
 ## Handles movement, depth (zoom) layers, damage control (hull + shields),
-## and weapon firing. Based on game_design.md specifications.
+## and weapon firing. Based on docs/game_design.md specifications.
+##
+## Depth is the visual/mechanical representation of the "Screen multiple
+## action layers" concept: the middle layer is the main gameplay layer and
+## R1 / L1 (zoom_in / zoom_out) move the ship toward the front or back layer
+## to evade enemy fire. Enemy ships enter from any layer but converge on the
+## player's current layer.
+##
+## TODO(task-2): replace the Polygon2D placeholder in player_ship.tscn with
+## the GDAS-1 sprite (assets/sprites/player/gdas1.png + json-array metadata)
+## once that asset is available. The controller does not depend on the
+## specific visual node, so no logic changes should be needed.
 
 const ProjectileScene := preload("res://scenes/weapons/projectile.tscn")
 
@@ -12,7 +22,22 @@ const ProjectileScene := preload("res://scenes/weapons/projectile.tscn")
 signal hull_changed(new_hull: int)
 signal shield_changed(side: String, new_value: int)
 signal depth_changed(new_depth: float)
+signal layer_changed(new_layer: int)
 signal destroyed
+
+# ---- Enums ----
+## Discrete action layers, ordered back -> front.
+## MIDDLE (1) is the default gameplay layer per docs/game_design.md.
+enum ActionLayer { BACK = 0, MIDDLE = 1, FRONT = 2 }
+
+# ---- Constants ----
+const _LAYER_DEPTH_BACK: float = 0.0
+const _LAYER_DEPTH_MIDDLE: float = 0.5
+const _LAYER_DEPTH_FRONT: float = 1.0
+const _DEPTH_SCALE_MIN := 0.6
+const _DEPTH_SCALE_MAX := 1.4
+const _DEPTH_OPACITY_MIN := 0.5
+const _INVINCIBLE_TIME := 1.0
 
 # ---- Exported ----
 @export var base_speed: float = 200.0
@@ -23,7 +48,7 @@ signal destroyed
 @export var shield_regen_delay: float = 5.0
 @export var shield_regen_rate: float = 0.5
 
-# ---- Internal: Damage ----
+# ---- Internal: Damage control (GDAS-1: hull 3, front 3, back 3) ----
 var max_hull: int = 3
 var current_hull: int = 3
 var max_front_shield: int = 3
@@ -34,6 +59,8 @@ var current_back_shield: int = 3
 # ---- Internal: Depth/Layers ----
 var depth: float = 0.5  # 0 = back layer, 0.5 = middle, 1.0 = front
 var _target_depth: float = 0.5
+var current_layer: int = ActionLayer.MIDDLE
+var _last_emitted_depth: float = -1.0
 
 # ---- Internal: Speed ----
 var speed_level: int = 1
@@ -50,12 +77,6 @@ var _invincible_timer: float = 0.0
 var _is_invincible: bool = false
 var _ship_id: String = "gdas_1"
 
-# ---- Constants ----
-const _DEPTH_SCALE_MIN := 0.6
-const _DEPTH_SCALE_MAX := 1.4
-const _DEPTH_OPACITY_MIN := 0.5
-const _INVINCIBLE_TIME := 1.0
-
 
 func _ready() -> void:
 	_load_ship_data()
@@ -65,6 +86,8 @@ func _ready() -> void:
 	area_entered.connect(_on_area_entered)
 	add_to_group("player")
 	GameManager.player = self
+	current_layer = _layer_for_depth(_target_depth)
+	_apply_depth_visuals()
 
 
 func _load_ship_data() -> void:
@@ -91,7 +114,7 @@ func _setup_weapons() -> void:
 
 
 func _create_weapon(wname: String) -> Node2D:
-		match wname:
+	match wname:
 		"laser":
 			var laser := Laser.new()
 			laser.fire_rate = 0.12
@@ -160,26 +183,80 @@ func _cycle_speed() -> void:
 		speed_level = 1
 
 
-# ---- Depth/Layer System ----
+# ---- Depth / Action-layer system ----
 func _handle_depth(delta: float) -> void:
+	# zoom_in = R1 (gamepad) / E (keyboard), zoom_out = L1 / Q.
 	if Input.is_action_just_pressed("zoom_in"):
-		_target_depth = clampf(_target_depth + depth_step, min_depth, max_depth)
+		change_depth(depth_step)
 	if Input.is_action_just_pressed("zoom_out"):
-		_target_depth = clampf(_target_depth - depth_step, min_depth, max_depth)
+		change_depth(-depth_step)
 
-	depth = lerp(depth, _target_depth, zoom_speed * delta)
+	# move_toward cannot overshoot the clamped target on a long frame,
+	# unlike lerp(depth, target, zoom_speed * delta).
+	depth = move_toward(depth, _target_depth, zoom_speed * delta)
 	_apply_depth_visuals()
+
+
+## Change the requested depth, clamped to [min_depth, max_depth].
+## Public so other systems (and tests) can drive the layer mechanic directly.
+func change_depth(delta: float) -> void:
+	_target_depth = clampf(_target_depth + delta, min_depth, max_depth)
+	_update_layer_from_target()
+
+
+## Switch to a discrete action layer (BACK=0, MIDDLE=1, FRONT=2).
+func set_action_layer(layer: int) -> void:
+	var clamped := clampi(layer, ActionLayer.BACK, ActionLayer.FRONT)
+	_target_depth = _depth_for_layer(clamped)
+	current_layer = clamped
+	layer_changed.emit(current_layer)
+
+
+func get_action_layer() -> int:
+	return current_layer
+
+
+func get_target_depth() -> float:
+	return _target_depth
+
+
+func get_depth() -> float:
+	return depth
+
+
+func _depth_for_layer(layer: int) -> float:
+	match layer:
+		ActionLayer.BACK:
+			return _LAYER_DEPTH_BACK
+		ActionLayer.MIDDLE:
+			return _LAYER_DEPTH_MIDDLE
+		ActionLayer.FRONT:
+			return _LAYER_DEPTH_FRONT
+	return _LAYER_DEPTH_MIDDLE
+
+
+func _layer_for_depth(value: float) -> int:
+	if value < 0.25:
+		return ActionLayer.BACK
+	if value < 0.75:
+		return ActionLayer.MIDDLE
+	return ActionLayer.FRONT
+
+
+func _update_layer_from_target() -> void:
+	var new_layer := _layer_for_depth(_target_depth)
+	if new_layer != current_layer:
+		current_layer = new_layer
+		layer_changed.emit(current_layer)
 
 
 func _apply_depth_visuals() -> void:
 	var scale_mult := lerpf(_DEPTH_SCALE_MIN, _DEPTH_SCALE_MAX, depth)
 	scale = Vector2(scale_mult, scale_mult)
 	modulate.a = lerpf(_DEPTH_OPACITY_MIN, 1.0, depth)
-	depth_changed.emit(depth)
-
-
-func get_depth() -> float:
-	return depth
+	if not is_equal_approx(depth, _last_emitted_depth):
+		_last_emitted_depth = depth
+		depth_changed.emit(depth)
 
 
 # ---- Firing ----
@@ -233,11 +310,11 @@ func _handle_shield_regen(delta: float) -> void:
 func _handle_invincibility(delta: float) -> void:
 	if _is_invincible:
 		_invincible_timer -= delta
-		# Flicker effect
+		# Flicker effect; keep the alpha supplied by the depth visuals.
 		modulate.r = 0.5 if fmod(_invincible_timer, 0.1) < 0.05 else 1.0
 		if _invincible_timer <= 0.0:
 			_is_invincible = false
-			modulate = Color.WHITE
+			modulate = Color(1, 1, 1, modulate.a)
 
 
 func take_damage(amount: int, from_front: bool = true) -> void:
