@@ -20,8 +20,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import math
 import random
+import struct
 import sys
 import wave
 from array import array
@@ -266,10 +268,84 @@ def sfx_explosion() -> list[float]:
     return buf
 
 
+def parse_wav_chunks(data: bytes) -> dict[bytes, bytes]:
+    """Return RIFF chunks keyed by four-byte ID, validating the container."""
+    if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        raise ValueError("not a RIFF/WAVE file")
+    if struct.unpack_from("<I", data, 4)[0] != len(data) - 8:
+        raise ValueError("bad RIFF size")
+    chunks: dict[bytes, bytes] = {}
+    pos = 12
+    while pos + 8 <= len(data):
+        chunk_id = data[pos:pos + 4]
+        size = struct.unpack_from("<I", data, pos + 4)[0]
+        end = pos + 8 + size
+        if end > len(data):
+            raise ValueError(f"truncated {chunk_id!r} chunk")
+        chunks[chunk_id] = data[pos + 8:end]
+        pos = end + (size & 1)  # RIFF chunks are word-aligned
+    return chunks
+
+
+def add_smpl_loop(data: bytes, loop_frames: int) -> bytes:
+    """Insert a standard ``smpl`` chunk marking the whole sample as a forward loop.
+
+    Godot 4.3's WAV importer defaults to "Detect From WAV" and reads this chunk,
+    so imported music stems get ``AudioStreamWAV.LOOP_FORWARD`` for free. The
+    AudioManager also enables looping at runtime, in case the import preset is
+    overridden to "Disabled" (see audio_manager.gd). Godot treats ``smpl``
+    loop end as exclusive, so ``loop_frames`` covers the entire buffer.
+    """
+    chunks = parse_wav_chunks(data)
+    if b"smpl" in chunks:
+        raise ValueError("WAV already has an smpl chunk")
+
+    insert_at = None
+    pos = 12
+    while pos + 8 <= len(data):
+        chunk_id = data[pos:pos + 4]
+        size = struct.unpack_from("<I", data, pos + 4)[0]
+        if chunk_id == b"data":
+            insert_at = pos
+            break
+        pos += 8 + size + (size & 1)
+    if insert_at is None:
+        raise ValueError("WAV has no data chunk")
+
+    # 9 header fields + 5 fields in one SAMPLE_LOOP record (20 bytes).
+    payload = struct.pack(
+        "<9I",
+        0,                             # manufacturer
+        0,                             # product
+        1_000_000_000 // RATE,         # sample period, ns (approximate)
+        60,                            # MIDI unity note (C4)
+        0,                             # MIDI pitch fraction
+        0, 0,                          # SMPTE format / offset (unused)
+        1,                             # cSampleLoops
+        20,                            # cbLoopSize (bytes per loop record)
+    ) + struct.pack(
+        "<5I",
+        0,                             # loop cue point ID
+        0,                             # loop type: 0 = forward
+        0,                             # loop start frame
+        loop_frames,                   # loop end frame (exclusive in Godot)
+        0,                             # loop fraction
+    )
+    chunk = b"smpl" + struct.pack("<I", len(payload)) + payload
+    if len(chunk) & 1:
+        chunk += b"\x00"
+    result = bytearray(data[:insert_at] + chunk + data[insert_at:])
+    struct.pack_into("<I", result, 4, len(result) - 8)  # fix RIFF size
+    return bytes(result)
+
+
 def write_wav(path: Path, buf: list[float], peak: float = 0.88,
-              edge_fade: float = 0.005) -> None:
-    """Normalize and write 16-bit mono PCM WAV with a short seam de-click fade."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+              edge_fade: float = 0.005, loop: bool = False) -> None:
+    """Normalize and write 16-bit mono PCM WAV with a short seam de-click fade.
+
+    ``loop=True`` (music stems only) embeds a forward-loop ``smpl`` chunk; SFX
+    stay one-shot by leaving the chunk out.
+    """
     found = max(abs(x) for x in buf)
     if found <= 1e-9:
         raise ValueError(f"{path.name}: buffer is silent")
@@ -286,17 +362,24 @@ def write_wav(path: Path, buf: list[float], peak: float = 0.88,
         pcm.append(int(max(-1.0, min(1.0, v)) * 32767.0))
     if sys.byteorder != "little":
         pcm.byteswap()
-    with wave.open(str(path), "wb") as w:
+    stream = io.BytesIO()
+    with wave.open(stream, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(RATE)
         w.writeframes(pcm.tobytes())
+    data = stream.getvalue()
+    if loop:
+        data = add_smpl_loop(data, n)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
 
 
 def check() -> bool:
     expected = [(MUSIC_DIR / name, True) for name in MUSIC_FILES]
     expected += [(SFX_DIR / name, False) for name in SFX_FILES]
-    print(f"{'file':<22} {'bytes':>9} {'dur(s)':>8} {'rate':>6} {'ch':>3} {'peak':>6}  result")
+    print(f"{'file':<22} {'bytes':>9} {'dur(s)':>8} {'rate':>6} {'ch':>3} "
+          f"{'peak':>6} {'loop':>9}  result")
     ok = True
     for path, is_loop in expected:
         try:
@@ -305,6 +388,8 @@ def check() -> bool:
             size = path.stat().st_size
             if size < 1000:
                 raise ValueError("file too small")
+            raw_bytes = path.read_bytes()
+            chunks = parse_wav_chunks(raw_bytes)
             with wave.open(str(path), "rb") as w:
                 ch, width, rate, frames = (
                     w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
@@ -321,12 +406,33 @@ def check() -> bool:
                 raise ValueError(f"bad peak: {peak}")
             if is_loop and frames != LOOP_FRAMES:
                 raise ValueError(f"loop length {frames} != {LOOP_FRAMES} frames")
+
+            smpl = chunks.get(b"smpl")
+            if is_loop:
+                if smpl is None:
+                    raise ValueError("music WAV missing smpl loop chunk")
+                if len(smpl) < 56:
+                    raise ValueError(f"short smpl chunk: {len(smpl)} bytes")
+                loop_count = struct.unpack_from("<I", smpl, 28)[0]
+                loop_type, loop_start, loop_end = struct.unpack_from("<3I", smpl, 40)
+                if loop_count != 1:
+                    raise ValueError(f"smpl loop count {loop_count} != 1")
+                if (loop_type, loop_start, loop_end) != (0, 0, frames):
+                    raise ValueError(
+                        f"smpl loop {(loop_type, loop_start, loop_end)} != (0, 0, {frames})"
+                    )
+                loop_label = "smpl/fwd"
+            else:
+                if smpl is not None:
+                    raise ValueError("SFX WAV must not carry an smpl loop chunk")
+                loop_label = "one-shot"
+
             print(f"{str(path.relative_to(ROOT)):<22} {size:>9} {frames / RATE:>8.3f} "
-                  f"{rate:>6} {ch:>3} {peak:>6}  PASS")
+                  f"{rate:>6} {ch:>3} {peak:>6} {loop_label:>9}  PASS")
         except Exception as exc:  # noqa: BLE001 - report every asset, then fail
             ok = False
             print(f"{str(path.relative_to(ROOT)):<22} {'-':>9} {'-':>8} {'-':>6} "
-                  f"{'-':>3} {'-':>6}  FAIL: {exc}")
+                  f"{'-':>3} {'-':>6} {'-':>9}  FAIL: {exc}")
     return ok
 
 
@@ -343,9 +449,9 @@ def main() -> int:
         0.80 * drums[i] + bass[i] + pad[i] + arp[i]
         for i in range(LOOP_FRAMES)
     ]
-    write_wav(MUSIC_DIR / "base_beat.wav", base)
-    write_wav(MUSIC_DIR / "drums.wav", drums)
-    write_wav(MUSIC_DIR / "vocals.wav", build_vocals())
+    write_wav(MUSIC_DIR / "base_beat.wav", base, loop=True)
+    write_wav(MUSIC_DIR / "drums.wav", drums, loop=True)
+    write_wav(MUSIC_DIR / "vocals.wav", build_vocals(), loop=True)
 
     sfx = {
         "laser.wav": sfx_laser(),

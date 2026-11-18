@@ -6,6 +6,17 @@ All files are **44.1 kHz, mono, 16-bit PCM WAV**, normalized to 0.88 full scale
 the `BPM := 140.0` constant in `scripts/autoload/audio_manager.gd` so the
 AudioManager beat/bar counters stay in phase with the loop.
 
+## Looping
+
+The three music stems carry a standard RIFF `smpl` chunk describing one
+full-length **forward** loop (start frame 0, end frame 302400). Godot 4.3's WAV
+importer defaults to "Detect From WAV", so imported stems become looping
+`AudioStreamWAV` resources. As a second layer, `AudioManager.play_music()` (and
+`play_vocals()`) set `loop_mode = LOOP_FORWARD`, `loop_begin = 0` and
+`loop_end = frame_count` on the stream before playback, so music still loops if
+the import preset is overridden to "Disabled". SFX are written without loop
+metadata and played via the one-shot `play_sfx()` path.
+
 | Plan slot | File | Origin |
 |---|---|---|
 | Base beat loop (instrumental) | `music/base_beat.wav` | synthesized: kick + snare + hats, bass, pad, arpeggio |
@@ -28,11 +39,13 @@ From the Godot project root:
 
 ```sh
 python3 assets/audio/generate_audio.py          # regenerate every WAV
-python3 assets/audio/generate_audio.py --check  # header/duration/peak validation
+python3 assets/audio/generate_audio.py --check  # header/duration/peak/loop validation
 ```
 
 The generator uses only the Python 3 standard library (`wave`, `array`, `math`,
-`random`) and fixed noise seeds, so re-running produces byte-identical files.
+`random`, `struct`, `io`) and fixed noise seeds, so re-running produces
+byte-identical files. `--check` also verifies that music stems contain a
+full-length forward `smpl` loop and that SFX contain no loop metadata.
 
 A Sonic Pi score for this stage lives in the parent repository at
 `docs/music/stage1.rb` (stage-name convention from `docs/music/readme.md`).

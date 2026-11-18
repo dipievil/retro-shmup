@@ -83,11 +83,41 @@ func _setup_players() -> void:
 		_players[stem_name] = player
 
 
+# ---- Looping ----
+## Music must keep playing past the 16-beat stem length. Godot imports bare PCM
+## WAVs with looping disabled unless the file carries loop metadata or the
+## import preset enables it, so enforce it on the stream itself here. This
+## keeps playback correct even if the import settings are overridden. SFX go
+## through play_sfx() and deliberately remain one-shot.
+func _enable_music_loop(stream: AudioStream) -> void:
+	if stream is AudioStreamWAV:
+		var wav := stream as AudioStreamWAV
+		var frames := int(round(wav.get_length() * float(wav.get_mix_rate())))
+		if frames <= 0:
+			push_warning("AudioManager: cannot loop an empty WAV stream")
+			return
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		wav.loop_begin = 0
+		wav.loop_end = frames  # Godot's loop end is exclusive: loop the full stem
+	elif stream is AudioStreamOggVorbis:
+		var ogg := stream as AudioStreamOggVorbis
+		ogg.loop = true
+		ogg.loop_offset = 0.0
+	elif stream is AudioStreamMP3:
+		var mp3 := stream as AudioStreamMP3
+		mp3.loop = true
+		mp3.loop_offset = 0.0
+
+
 # ---- Public API ----
 func play_music(stream: AudioStream, stem: String = STEM_BASE_BEAT) -> void:
 	if not _players.has(stem):
 		push_warning("AudioManager: unknown stem '%s'" % stem)
 		return
+	if stream == null:
+		push_warning("AudioManager: play_music called with no stream")
+		return
+	_enable_music_loop(stream)
 	var player: AudioStreamPlayer = _players[stem]
 	player.stream = stream
 	player.play()
@@ -137,7 +167,8 @@ func play_sfx(stream: AudioStream, volume_db: float = 0.0) -> void:
 # ---- Cutscene vocals ----
 func play_vocals(stream: AudioStream) -> void:
 	var player: AudioStreamPlayer = _players.get(STEM_VOCALS, null)
-	if player:
+	if player and stream != null:
+		_enable_music_loop(stream)  # vocals.wav is a looping music stem
 		player.stream = stream
 		player.play()
 		set_stem_volume(STEM_VOCALS, 0.0)
