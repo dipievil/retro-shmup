@@ -1,5 +1,4 @@
 class_name PlayerShip
-class_name PlayerShip
 extends Area2D
 
 ## Player ship controller.
@@ -91,7 +90,7 @@ func _setup_weapons() -> void:
 
 
 func _create_weapon(wname: String) -> Node2D:
-		match wname:
+	match wname:
 		"laser":
 			var laser := Laser.new()
 			laser.fire_rate = 0.12

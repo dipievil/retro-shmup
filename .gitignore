@@ -13,6 +13,10 @@ Thumbs.db
 *.swp
 *~
 
+# Dev tooling (tools/validate_project.py)
+__pycache__/
+*.pyc
+
 # Export presets (keep template, ignore binary)
 export_presets.cfg
 

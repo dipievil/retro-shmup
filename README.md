@@ -3,6 +3,10 @@
 A retro-style shoot-em-up game built with Godot Engine 4.3+.
 16-bit pixel art, dynamic layered audio, anime cutscenes, and multi-layer depth combat.
 
+> This repository is the game submodule (`src/retro-shmup` in the parent repo).
+> `docs/game_design.md` and `docs/plan.md` in the parent repository are the
+> source of truth for requirements; this README describes the Godot project.
+
 ## Quick Start
 
 1. Open Godot 4.3+ (GL Compatibility renderer)
@@ -20,6 +24,25 @@ A retro-style shoot-em-up game built with Godot Engine 4.3+.
 | Fire Missile | K |
 | Fire Bomb | L |
 | Pause | Escape |
+
+## Foundation configuration (Phase 1)
+
+| Area | Setting | Value / rationale |
+|------|---------|-------------------|
+| Renderer | `rendering/renderer/rendering_method` | `gl_compatibility` — runs on low-end hardware and headless CI |
+| Base viewport | `display/window/size/viewport_*` | 480x270 (16:9), matching the retro base resolution |
+| Scaling | `window/stretch/{mode,aspect,scale_mode}` | `viewport` / `keep` / `integer` — whole-number scaling, no blurry or uneven pixels |
+| Textures | `textures/canvas_textures/default_texture_filter` | `0` = Nearest (nearest-neighbour sampling for pixel art) |
+| Pixel snap | `rendering/2d/snap/snap_2d_transforms_to_pixel` | enabled; vertex snapping is deliberately left off per Godot's recommendation |
+| Audio | `audio/buses/default_bus_layout` | empty — the stem buses (`Music`, `BaseBeat`, `Drums`, `Instruments`, `Vocals`, `SFX`) are created at runtime by `AudioManager` through `AudioServer`, keeping the dynamic mix in one place |
+
+Input Map already defines movement (`move_up/down/left/right`), zoom (`zoom_in`/`zoom_out`),
+fire (`fire`, `fire_missile`, `fire_bomb`), `start` and `pause`, with both WASD and arrow keys.
+Gamepad R1/L1 (shoulder buttons) bindings for zoom are intentionally left to the
+player-movement task so the control work stays in one place.
+
+The `ui/` folder from the plan is represented by `scenes/ui/` (HUD scene) and
+`scripts/ui/` (HUD script), following Godot's parallel scenes/scripts convention.
 
 ## Project Structure
 
@@ -44,9 +67,11 @@ retro-shmup/
 │   ├── weapons/            # Weapon, Laser, Projectile
 │   ├── ui/                 # HUD
 │   └── cutscenes/          # Cutscene system
+├── tools/                  # Dev-only validation helpers (not game code)
+│   └── validate_project.py
 └── assets/                 # Art, audio, fonts, shaders
-    ├── sprites/
-    ├── audio/
+    ├── sprites/            # player/, enemies/, effects/, props/
+    ├── audio/              # music/, sfx/
     ├── fonts/
     └── shaders/
 ```
@@ -84,6 +109,19 @@ retro-shmup/
 | 4 | enemy_projectiles |
 | 5 | pickups |
 | 6 | environment |
+
+## Validation
+
+Run the dependency-free structural checks from the repository root:
+
+```sh
+python3 tools/validate_project.py
+```
+
+It checks the required folder layout, `project.godot` settings, scene/script
+resource references, unique GDScript class names, block indentation and obvious
+secrets. If a Godot binary is on `PATH`, it also runs a headless parse; otherwise
+it reports that validation was structural only. Exit code is 0 when all checks pass.
 
 ## Development
 
