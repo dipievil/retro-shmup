@@ -65,9 +65,16 @@ jobs:
           mkdir -p build/linux
           godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
       - name: Smoke test the exported binary
+        # Container jobs default to `sh -e`, so keep this POSIX-compatible.
         run: |
-          set -o pipefail
-          timeout 60 ./build/linux/retro-shmup.x86_64 --headless --quit-after 120 2>&1 | tee smoke.log
+          if timeout 60 ./build/linux/retro-shmup.x86_64 --headless --quit-after 120 > smoke.log 2>&1; then
+            cat smoke.log
+          else
+            status=$?
+            cat smoke.log
+            echo "::error::exported binary exited ${status}"
+            exit "${status}"
+          fi
           if grep -qE 'SCRIPT ERROR|Parse Error|Failed to load script' smoke.log; then
             echo "::error::exported build logged a script error"
             exit 1
