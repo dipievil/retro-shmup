@@ -47,6 +47,7 @@ export GODOT_SILENCE_ROOT_WARNING=1
 FAILED=0
 STEP=0
 LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
 
 pass() { echo "  PASS  $1"; }
 fail() {
@@ -83,23 +84,20 @@ fi
 # --------------------------------------------------------------------------
 section "Asset validators"
 # --------------------------------------------------------------------------
-VALIDATORS=()
+VALIDATOR_COUNT=0
 while IFS= read -r file; do
-    VALIDATORS+=("$file")
-done < <(find tools tests -maxdepth 1 -name 'validate_*.py' 2>/dev/null | sort)
-
-if [ "${#VALIDATORS[@]}" -eq 0 ]; then
-    skip "no validate_*.py found"
-fi
-
-for validator in "${VALIDATORS[@]}"; do
-    if "$PYTHON_BIN" "$validator" >"$LOG" 2>&1; then
-        pass "$validator"
+    VALIDATOR_COUNT=$((VALIDATOR_COUNT + 1))
+    if "$PYTHON_BIN" "$file" >"$LOG" 2>&1; then
+        pass "$file"
     else
-        fail "$validator"
+        fail "$file"
         tail -25 "$LOG" | sed 's/^/        /'
     fi
-done
+done < <(find tools tests -maxdepth 1 -name 'validate_*.py' 2>/dev/null | sort)
+
+if [ "$VALIDATOR_COUNT" -eq 0 ]; then
+    skip "no validate_*.py found"
+fi
 
 # --------------------------------------------------------------------------
 section "Audio assets"
@@ -118,27 +116,35 @@ fi
 # --------------------------------------------------------------------------
 section "GDScript test suites"
 # --------------------------------------------------------------------------
-SUITES=()
-while IFS= read -r file; do
-    SUITES+=("$file")
-done < <(find tests -maxdepth 1 \( -name '*_test.gd' -o -name 'test_*.gd' \) 2>/dev/null | sort)
-
-if [ "${#SUITES[@]}" -eq 0 ]; then
-    skip "no tests/*_test.gd found"
+# Avoid expanding an empty array under `set -u`: Bash < 4.4 treats that as an
+# unbound variable, so keep the optional timeout in a scalar and branch on it.
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_BIN="$(command -v timeout)"
 fi
 
-for suite in "${SUITES[@]}"; do
-    TIMEOUT_CMD=()
-    if command -v timeout >/dev/null 2>&1; then
-        TIMEOUT_CMD=(timeout "$SUITE_TIMEOUT")
-    fi
-    if "${TIMEOUT_CMD[@]}" "$GODOT_BIN" --headless --script "res://${suite}" >"$LOG" 2>&1; then
-        pass "$suite"
+run_suite() {
+    if [ -n "$TIMEOUT_BIN" ]; then
+        "$TIMEOUT_BIN" "$SUITE_TIMEOUT" "$@"
     else
-        fail "$suite"
+        "$@"
+    fi
+}
+
+SUITE_COUNT=0
+while IFS= read -r file; do
+    SUITE_COUNT=$((SUITE_COUNT + 1))
+    if run_suite "$GODOT_BIN" --headless --script "res://${file}" >"$LOG" 2>&1; then
+        pass "$file"
+    else
+        fail "$file"
         tail -30 "$LOG" | sed 's/^/        /'
     fi
-done
+done < <(find tests -maxdepth 1 \( -name '*_test.gd' -o -name 'test_*.gd' \) 2>/dev/null | sort)
+
+if [ "$SUITE_COUNT" -eq 0 ]; then
+    skip "no tests/*_test.gd found"
+fi
 
 # --------------------------------------------------------------------------
 if [ "$RUN_LINT" = "1" ]; then
@@ -146,7 +152,11 @@ if [ "$RUN_LINT" = "1" ]; then
     if ! command -v gdlint >/dev/null 2>&1; then
         skip "gdlint not installed"
     else
-        if gdlint scripts tests >"$LOG" 2>&1; then
+        LINT_PATHS=(scripts)
+        if [ -d tests ]; then
+            LINT_PATHS+=(tests)
+        fi
+        if gdlint "${LINT_PATHS[@]}" >"$LOG" 2>&1; then
             pass "gdlint"
         else
             fail "gdlint"
@@ -162,8 +172,6 @@ if [ "$RUN_LINT" = "1" ]; then
         fi
     fi
 fi
-
-rm -f "$LOG"
 
 echo
 if [ "$FAILED" -gt 0 ]; then
