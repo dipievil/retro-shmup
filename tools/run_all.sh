@@ -85,7 +85,8 @@ fi
 section "Asset validators"
 # --------------------------------------------------------------------------
 VALIDATOR_COUNT=0
-while IFS= read -r file; do
+# Discovery runs on fd 3 so child processes keep their own stdin.
+while IFS= read -r -u 3 file; do
     VALIDATOR_COUNT=$((VALIDATOR_COUNT + 1))
     if "$PYTHON_BIN" "$file" >"$LOG" 2>&1; then
         pass "$file"
@@ -93,7 +94,7 @@ while IFS= read -r file; do
         fail "$file"
         tail -25 "$LOG" | sed 's/^/        /'
     fi
-done < <(find tools tests -maxdepth 1 -name 'validate_*.py' 2>/dev/null | sort)
+done 3< <(find tools tests -maxdepth 1 -name 'validate_*.py' 2>/dev/null | sort)
 
 if [ "$VALIDATOR_COUNT" -eq 0 ]; then
     skip "no validate_*.py found"
@@ -132,7 +133,7 @@ run_suite() {
 }
 
 SUITE_COUNT=0
-while IFS= read -r file; do
+while IFS= read -r -u 3 file; do
     SUITE_COUNT=$((SUITE_COUNT + 1))
     if run_suite "$GODOT_BIN" --headless --script "res://${file}" >"$LOG" 2>&1; then
         pass "$file"
@@ -140,7 +141,7 @@ while IFS= read -r file; do
         fail "$file"
         tail -30 "$LOG" | sed 's/^/        /'
     fi
-done < <(find tests -maxdepth 1 \( -name '*_test.gd' -o -name 'test_*.gd' \) 2>/dev/null | sort)
+done 3< <(find tests -maxdepth 1 \( -name '*_test.gd' -o -name 'test_*.gd' \) 2>/dev/null | sort)
 
 if [ "$SUITE_COUNT" -eq 0 ]; then
     skip "no tests/*_test.gd found"
