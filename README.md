@@ -159,7 +159,7 @@ pushed; the `Release` workflow (`.github/workflows/release.yml`) gates on
 
 Download `retro-shmup.x86_64` and `retro-shmup.pck` from that release, keep them
 in the same directory and run the binary. `SHA256SUMS` is attached alongside
-them — verify with `sha256sum -c SHA256SUMS` before running. The demo covers
-GDAS-1 movement/zoom and the laser, missile and bomb weapons; it has no HUD and
-no audio yet.
+them — verify with `sha256sum -c SHA256SUMS` before running. The Phase 1 demo
+covers GDAS-1 movement/zoom and the laser, missile and bomb weapons. The release
+path packages the tagged source as-is: it adds no gameplay, HUD or audio assets.
 
