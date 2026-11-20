@@ -3,8 +3,8 @@
 
 Runs without Godot installed: checks project settings, folder layout, scene and
 script resource references, unique class names, GDScript block indentation and
-the absence of obvious secrets. If a Godot binary is on PATH, an additional
-headless parse is attempted.
+the absence of obvious secrets. If a Godot binary is on PATH (or set in GODOT_BIN),
+an additional headless parse is attempted.
 
 Usage: python3 tools/validate_project.py
 Exit code 0 = all checks passed, 1 = at least one failure.
@@ -280,7 +280,7 @@ check(scanned > 0, f"scanned {scanned} text files for secrets")
 # Engine parse (optional)
 # --------------------------------------------------------------------------
 section("Godot engine parse")
-godot = shutil.which("godot") or shutil.which("godot4") or shutil.which("godot-4")
+godot = os.environ.get("GODOT_BIN") or shutil.which("godot") or shutil.which("godot4") or shutil.which("godot-4")
 if godot:
     try:
         result = subprocess.run(
@@ -295,8 +295,10 @@ if godot:
             print(result.stderr[-2000:])
     except subprocess.TimeoutExpired:
         check(False, "Godot headless parse timed out")
+    except OSError as exc:
+        check(False, f"cannot run {godot}: {exc}")
 else:
-    print("  note  no Godot binary on PATH - structural validation only (engine parse skipped)")
+    print("  note  no Godot binary found - structural validation only (engine parse skipped)")
 
 
 # --------------------------------------------------------------------------

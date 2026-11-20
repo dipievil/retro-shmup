@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (gdtoolkit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install gdtoolkit==4.5.0
+      # Report-only until the existing scripts are clean: 16 gdlint findings and
+      # 5 unformatted files on dev (see tools/run_all.sh --lint).
+      - name: gdlint (report-only)
+        continue-on-error: true
+        run: gdlint scripts
+      - name: gdformat --check (report-only)
+        continue-on-error: true
+        run: gdformat --check scripts
+
+  test:
+    name: Test (Godot ${{ matrix.godot }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 4.3 is the engine pinned in project.godot; 4.7.2 is the current stable.
+        godot: ["4.3", "4.7.2"]
+    container:
+      image: barichello/godot-ci:${{ matrix.godot }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python 3 for the asset validators
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3
+      - name: Import, validators and test suites
+        run: tools/run_all.sh
+
+  build:
+    name: Build (Linux)
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+      # The image ships export templates under /root; container jobs run with
+      # HOME=/github/home, so link them where Godot looks for them.
+      - name: Link export templates
+        run: |
+          mkdir -p ~/.local/share/godot
+          ln -sfn /root/.local/share/godot/export_templates ~/.local/share/godot/export_templates
+      - name: Export Linux build
+        run: |
+          mkdir -p build/linux
+          godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
+      - name: Smoke test the exported binary
+        # Container jobs default to `sh -e`, so keep this POSIX-compatible.
+        run: |
+          if timeout 60 ./build/linux/retro-shmup.x86_64 --headless --quit-after 120 > smoke.log 2>&1; then
+            cat smoke.log
+          else
+            status=$?
+            cat smoke.log
+            echo "::error::exported binary exited ${status}"
+            exit "${status}"
+          fi
+          if grep -qE 'SCRIPT ERROR|Parse Error|Failed to load script' smoke.log; then
+            echo "::error::exported build logged a script error"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retro-shmup-linux
+          path: build/linux/
+          if-no-files-found: error
