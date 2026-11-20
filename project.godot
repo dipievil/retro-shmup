@@ -24,13 +24,26 @@ window/size/window_width_override=1920
 window/size/window_height_override=1080
 window/stretch/mode="viewport"
 window/stretch/aspect="keep"
+; Pixel art must scale by whole numbers only (Godot 4.2+).
+window/stretch/scale_mode="integer"
 
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+; 0 = Nearest, 1 = Linear (Godot 4.x canvas texture filter enum).
 textures/canvas_textures/default_texture_filter=0
+; Crisp low-res sprites: snap CanvasItem transforms, not vertices.
+2d/snap/snap_2d_transforms_to_pixel=true
 environment/defaults/default_clear_color=Color(0.04, 0.04, 0.08, 1)
+
+[audio]
+
+; Layered stems are built at runtime with AudioServer by
+; scripts/autoload/audio_manager.gd (Music -> Master, stems -> Music/SFX).
+; No on-disk bus layout is checked in: AudioManager owns the bus topology.
+; See docs/plan.md "Dynamic Audio Design".
+buses/default_bus_layout=""
 
 [physics]
 
