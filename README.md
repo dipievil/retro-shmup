@@ -18,8 +18,11 @@ A retro-style shoot-em-up game built with Godot Engine 4.3+.
 | Action | Key |
 |--------|-----|
 | Move | WASD / Arrow Keys |
+| Move (gamepad) | D-pad / left stick |
 | Zoom In (closer layer) | E |
 | Zoom Out (farther layer) | Q |
+| Zoom In (gamepad) | R1 |
+| Zoom Out (gamepad) | L1 |
 | Fire Laser | J / Space |
 | Fire Missile | K |
 | Fire Bomb | L |
