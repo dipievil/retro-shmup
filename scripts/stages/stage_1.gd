@@ -5,6 +5,7 @@ extends StageBase
 ## Simple enemy waves to test movement and firing cadence (greybox).
 
 const EnemyScene := preload("res://scenes/enemies/base_enemy.tscn")
+const OrganicEnemyScene := preload("res://scenes/enemies/organic_enemy.tscn")
 
 
 func _build_spawn_queue() -> void:
@@ -21,3 +22,7 @@ func _build_spawn_queue() -> void:
 		_queue_spawn(14.0 + i * 1.5, EnemyScene, Vector2(-30, 60 + i * 50), 0.7)
 	for i in range(3):
 		_queue_spawn(14.0 + i * 1.5, EnemyScene, Vector2(510, 60 + i * 50), 0.3)
+
+	# Wave 4: organic enemies enter from the right and fly left (Phase 2).
+	for i in range(3):
+		_queue_spawn(20.0 + i * 1.8, OrganicEnemyScene, Vector2(510, 60 + i * 60), 0.5)
