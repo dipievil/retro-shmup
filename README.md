@@ -150,3 +150,16 @@ godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
 CI (`.github/workflows/ci.yml`) runs the script on Godot 4.3 and 4.7.2, exports
 the Linux build with `export_presets.cfg` and uploads it as an artifact.
 
+## Demo builds
+
+The Phase 1 demo is released as **0.0.1-demo** when the `v0.0.1-demo` tag is
+pushed; the `Release` workflow (`.github/workflows/release.yml`) gates on
+`tools/run_all.sh`, exports the Linux x86_64 build and publishes it to the
+[GitHub Releases page](https://github.com/dipievil/retro-shmup/releases/tag/v0.0.1-demo).
+
+Download `retro-shmup.x86_64` and `retro-shmup.pck` from that release, keep them
+in the same directory and run the binary. `SHA256SUMS` is attached alongside
+them — verify with `sha256sum -c SHA256SUMS` before running. The demo covers
+GDAS-1 movement/zoom and the laser, missile and bomb weapons; it has no HUD and
+no audio yet.
+
