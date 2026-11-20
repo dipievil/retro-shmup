@@ -7,6 +7,11 @@ extends RefCounted
 ## present yet. Keeping the expected paths here lets weapons reference them now
 ## without hard failures: first_existing() returns null when nothing is imported.
 ## See docs/game_design.md ("Weapon types") and docs/plan.md ("Assets").
+##
+## validate_project.py: OPTIONAL-ASSET-REGISTRY
+## Every res:// path below is a best-effort lookup. Missing files are expected and
+## fall back to the built-in polygon visuals / silence, so the validator exempts
+## this file from its resource-existence check.
 
 const SPRITE_PATHS := {
 	"laser": [

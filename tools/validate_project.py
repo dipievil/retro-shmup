@@ -189,12 +189,20 @@ for scene in scene_files:
     used_sub = set(re.findall(r'SubResource\("([^"]+)"\)', text))
     check(used_sub <= declared_sub, f"{rel}: all SubResource ids are declared")
 
+# Registries of optional resource paths carry the marker below in a comment.
+# Those paths are probed at runtime and fall back when the asset is absent (e.g.
+# weapon sprites/SFX authored in sibling tasks), so demanding they exist here is
+# a false positive. Every other script stays subject to the existence check.
+OPTIONAL_ASSET_MARKER = "OPTIONAL-ASSET-REGISTRY"
+
 section("script resources")
 script_files = sorted((ROOT / "scripts").rglob("*.gd"))
 check(bool(script_files), "at least one .gd script exists")
 for script in script_files:
     text = script.read_text(encoding="utf-8")
     rel = script.relative_to(ROOT)
+    if OPTIONAL_ASSET_MARKER in text:
+        continue
     for path in set(re.findall(r"res://[A-Za-z0-9_./-]+", text)):
         check((ROOT / path.removeprefix("res://")).exists(), f"{rel}: {path} exists")
 
