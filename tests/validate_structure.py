@@ -3,8 +3,9 @@
 
 Runs without a Godot binary. It checks the serialized Input Map, the player
 controller source, the GDAS-1 damage data and the scene wiring. The behavioural
-checks live in tests/test_player_ship.gd and run with Godot headless when a
-Godot binary is available.
+checks live in tests/test_player_ship.gd and run with Godot headless as a scene
+(so autoloads are registered) when a Godot binary is available:
+    godot --headless --path . res://tests/test_player_ship.tscn
 """
 
 import re
@@ -94,6 +95,10 @@ check("enum ActionLayer" in ship, "discrete action-layer enum present")
 check("func change_depth" in ship, "change_depth() helper present")
 check("func set_action_layer" in ship, "set_action_layer() helper present")
 check("move_toward(depth, _target_depth" in ship, "depth interpolation cannot overshoot")
+check("clampf(_depth_for_layer(clamped), min_depth, max_depth)" in ship,
+      "set_action_layer clamps to the depth range")
+check("_update_layer_from_depth()" in ship, "layer follows interpolated depth")
+check("_update_layer_from_target" not in ship, "no target-based layer reporting")
 check(re.search(r"^\tmatch wname:", ship, re.M) is not None, "match at function body indent")
 check(re.search(r"^\t\tmatch wname:", ship, re.M) is None, "no over-indented match")
 
@@ -111,6 +116,17 @@ scene = read("scenes/player/player_ship.tscn")
 check('name="PlayerShip" type="Area2D"' in scene, "player scene root is Area2D")
 check("res://scripts/player/player_ship.gd" in scene, "player scene attaches controller")
 check((ROOT / "tests" / "test_player_ship.gd").is_file(), "headless GDScript test present")
+test_script = read("tests/test_player_ship.gd")
+check(re.search(r"^extends Node\s*$", test_script, re.M) is not None,
+      "test runs as a Node script (autoloads available)")
+check((ROOT / "tests" / "test_player_ship.tscn").is_file(), "headless GDScript test scene present")
+check("var moved: Vector2" in test_script, "movement result is explicitly typed")
+
+print("[task-4] HUD wiring")
+hud = read("scripts/ui/hud.gd")
+check("parent.add_child(container)" in hud, "bar row is added to its parent once")
+check(re.search(r"stats_vbox\.add_child\(_(hull|front_shield|back_shield)_bar\)", hud) is None,
+      "bars are not added a second time")
 
 if FAILURES:
     print(f"\n{len(FAILURES)} CHECK(S) FAILED")

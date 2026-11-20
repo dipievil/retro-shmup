@@ -34,6 +34,8 @@ enum ActionLayer { BACK = 0, MIDDLE = 1, FRONT = 2 }
 const _LAYER_DEPTH_BACK: float = 0.0
 const _LAYER_DEPTH_MIDDLE: float = 0.5
 const _LAYER_DEPTH_FRONT: float = 1.0
+const _LAYER_THRESHOLD_BACK_MIDDLE: float = (_LAYER_DEPTH_BACK + _LAYER_DEPTH_MIDDLE) / 2.0
+const _LAYER_THRESHOLD_MIDDLE_FRONT: float = (_LAYER_DEPTH_MIDDLE + _LAYER_DEPTH_FRONT) / 2.0
 const _DEPTH_SCALE_MIN := 0.6
 const _DEPTH_SCALE_MAX := 1.4
 const _DEPTH_OPACITY_MIN := 0.5
@@ -86,7 +88,7 @@ func _ready() -> void:
 	area_entered.connect(_on_area_entered)
 	add_to_group("player")
 	GameManager.player = self
-	current_layer = _layer_for_depth(_target_depth)
+	current_layer = _layer_for_depth(depth)
 	_apply_depth_visuals()
 
 
@@ -194,22 +196,23 @@ func _handle_depth(delta: float) -> void:
 	# move_toward cannot overshoot the clamped target on a long frame,
 	# unlike lerp(depth, target, zoom_speed * delta).
 	depth = move_toward(depth, _target_depth, zoom_speed * delta)
+	_update_layer_from_depth()
 	_apply_depth_visuals()
 
 
 ## Change the requested depth, clamped to [min_depth, max_depth].
+## current_layer follows the interpolated depth in _handle_depth().
 ## Public so other systems (and tests) can drive the layer mechanic directly.
 func change_depth(delta: float) -> void:
 	_target_depth = clampf(_target_depth + delta, min_depth, max_depth)
-	_update_layer_from_target()
 
 
-## Switch to a discrete action layer (BACK=0, MIDDLE=1, FRONT=2).
+## Target a discrete action layer (BACK=0, MIDDLE=1, FRONT=2).
+## The target depth is clamped to [min_depth, max_depth]; current_layer and
+## layer_changed update as the ship interpolates there.
 func set_action_layer(layer: int) -> void:
 	var clamped := clampi(layer, ActionLayer.BACK, ActionLayer.FRONT)
-	_target_depth = _depth_for_layer(clamped)
-	current_layer = clamped
-	layer_changed.emit(current_layer)
+	_target_depth = clampf(_depth_for_layer(clamped), min_depth, max_depth)
 
 
 func get_action_layer() -> int:
@@ -236,15 +239,15 @@ func _depth_for_layer(layer: int) -> float:
 
 
 func _layer_for_depth(value: float) -> int:
-	if value < 0.25:
+	if value < _LAYER_THRESHOLD_BACK_MIDDLE:
 		return ActionLayer.BACK
-	if value < 0.75:
+	if value < _LAYER_THRESHOLD_MIDDLE_FRONT:
 		return ActionLayer.MIDDLE
 	return ActionLayer.FRONT
 
 
-func _update_layer_from_target() -> void:
-	var new_layer := _layer_for_depth(_target_depth)
+func _update_layer_from_depth() -> void:
+	var new_layer := _layer_for_depth(depth)
 	if new_layer != current_layer:
 		current_layer = new_layer
 		layer_changed.emit(current_layer)
