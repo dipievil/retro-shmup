@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/test_stage_1_parallax.gd" id="1_test"]
+
+[node name="TestStage1Parallax" type="Node"]
+script = ExtResource("1_test")

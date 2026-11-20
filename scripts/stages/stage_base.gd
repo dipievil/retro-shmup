@@ -51,7 +51,10 @@ func _update_parallax(delta: float) -> void:
 		return
 	for layer in _parallax.get_children():
 		if layer is ParallaxLayer:
-			layer.motion_offset.y += scroll_speed * delta
+			# The prototype has no Camera2D, so motion_offset is advanced here.
+			# motion_scale normally applies to camera movement only; apply it
+			# explicitly so far/mid/near layers scroll at distinct speeds.
+			layer.motion_offset.y += scroll_speed * delta * layer.motion_scale.y
 
 
 # ---- Spawning ----
