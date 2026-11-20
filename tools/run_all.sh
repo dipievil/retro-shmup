@@ -135,10 +135,19 @@ run_suite() {
 SUITE_COUNT=0
 while IFS= read -r -u 3 file; do
     SUITE_COUNT=$((SUITE_COUNT + 1))
-    if run_suite "$GODOT_BIN" --headless --script "res://${file}" >"$LOG" 2>&1; then
-        pass "$file"
+    # A suite with a companion .tscn is scene-based: it needs the project's
+    # autoloads and global class_name registrations, which Godot does not set
+    # up in --script mode. Run it through the scene instead.
+    suite_args=(--script "res://${file}")
+    suite_label="$file"
+    if [ -f "${file%.gd}.tscn" ]; then
+        suite_args=(--path . "res://${file%.gd}.tscn")
+        suite_label="${file%.gd}.tscn"
+    fi
+    if run_suite "$GODOT_BIN" --headless "${suite_args[@]}" >"$LOG" 2>&1; then
+        pass "$suite_label"
     else
-        fail "$file"
+        fail "$suite_label"
         tail -30 "$LOG" | sed 's/^/        /'
     fi
 done 3< <(find tests -maxdepth 1 \( -name '*_test.gd' -o -name 'test_*.gd' \) 2>/dev/null | sort)
