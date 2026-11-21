@@ -148,11 +148,19 @@ godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
 `tests/*_test.gd` suite that exits non-zero.
 
 CI (`.github/workflows/ci.yml`) runs the script on Godot 4.3 and 4.7.2 and exports
-Linux, Windows and macOS builds with `export_presets.cfg`. Artifacts are named
-`retro-shmup-<version>-<short-sha>-<target>`, where `<version>` is the `v` tag on
-tag pushes and `dev` otherwise; retention is 14 days. Windows/macOS executables
-cannot run on the Linux runner, so those jobs smoke-test the exported `.pck`
-with the Linux engine rather than claiming a native smoke.
+Linux, Windows and macOS builds with `export_presets.cfg`. **CI artifact** names
+are `retro-shmup-<version>-<short-sha>-<target>`, where `<version>` is the `v` tag
+without its `v` on tag pushes and `dev` on branch pushes (including pushes to
+`main`); retention is 14 days. Windows/macOS executables cannot run on the Linux
+runner, so those jobs smoke-test the exported `.pck` with the Linux engine rather
+than claiming a native smoke.
+
+The semantic-release workflow (`.github/workflows/semantic-release.yml`) downloads
+those CI artifacts by the `retro-shmup-*` pattern and renames the dev-named ones
+before packaging. **Release assets** are therefore named
+`retro-shmup-<X.Y.Z>-<short-sha>-<target>` — the computed semantic version with no
+`dev` token — in `.zip` for Windows and `.tar.gz` otherwise, with `SHA256SUMS`
+matching the published archives.
 
 ## Demo builds
 
