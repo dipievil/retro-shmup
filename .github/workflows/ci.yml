@@ -91,7 +91,16 @@ jobs:
           esac
           short_sha="$(printf '%s' "$GITHUB_SHA" | cut -c1-7)"
           # e.g. retro-shmup-dev-1a2b3c4-linux / retro-shmup-0.5.0-1a2b3c4-macos
-          echo "artifact=retro-shmup-${version}-${short_sha}-${{ matrix.target }}" >> "$GITHUB_OUTPUT"
+          artifact="retro-shmup-${version}-${short_sha}-${{ matrix.target }}"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.target }}" = "macos" ]; then
+            # The macOS artifact is a tarball with the exact same name: release
+            # packaging matches `retro-shmup-*` and derives the extension from
+            # the artifact name, so the name must not gain a suffix.
+            echo "upload_path=build/$artifact" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload_path=${{ matrix.artifact_path }}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Export ${{ matrix.target }}
         run: |
           mkdir -p "$(dirname "${{ matrix.output }}")"
@@ -146,10 +155,23 @@ jobs:
             echo "::error::exported build logged a script error"
             exit 1
           fi
+      - name: Archive macOS bundle to preserve Unix modes
+        if: matrix.target == 'macos'
+        run: |
+          # upload-artifact@v4 downloads files with mode 0644, which would make
+          # the executable inside the .app bundle non-launchable. Tar it first
+          # so the executable bit survives the upload/download round trip.
+          archive="build/${{ steps.version.outputs.artifact }}"
+          # Archive the whole export directory: besides the .app bundle it may
+          # contain the external .pck referenced by the bundle.
+          tar -czf "$archive" -C build/macos .
+          test -s "$archive"
+          tar -tvzf "$archive"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.version.outputs.artifact }}
-          # Directory path keeps external .pck files and the macOS .app bundle intact.
-          path: ${{ matrix.artifact_path }}
+          # Directory paths keep external .pck files intact; the macOS path is
+          # the mode-preserving tarball built above (same artifact name).
+          path: ${{ steps.version.outputs.upload_path }}
           if-no-files-found: error
           retention-days: 14
