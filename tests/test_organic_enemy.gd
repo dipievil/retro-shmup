@@ -22,6 +22,7 @@ func _ready() -> void:
 func _run_tests() -> void:
 	print("[task-9] Organic enemy")
 	_test_movement()
+	_test_sprite_frames()
 	_test_beam()
 	_test_one_hit_death()
 	_test_player_collision()
@@ -98,6 +99,31 @@ func _test_movement() -> void:
 	enemy.position = Vector2(510, 120)
 	enemy._physics_process(0.1)
 	_check(enemy._velocity.x < 0.0, "spawn at x=510 does not bounce back to the right")
+
+
+func _test_sprite_frames() -> void:
+	# Regression: SpriteFrames.add_frame() is the Godot 4 API; a bad call leaves
+	# the default animation empty (invisible ship/explosion) with exit code 0.
+	var parent := _holder()
+	var enemy := _spawn_enemy(parent)
+	var enemy_sprite := enemy.get_node_or_null("Visual") as AnimatedSprite2D
+	_check(enemy_sprite != null, "organic enemy has an AnimatedSprite2D")
+	if enemy_sprite != null:
+		_check(
+			enemy_sprite.sprite_frames != null and enemy_sprite.sprite_frames.get_frame_count("default") == OrganicEnemy.FRAME_COUNT,
+			"organic enemy default animation has %d frames" % OrganicEnemy.FRAME_COUNT
+		)
+
+	var effect := ExplosionEffect.spawn(parent, Vector2(300, 120))
+	_check(effect != null, "explosion effect spawned for frame check")
+	if effect != null:
+		var effect_sprite := effect.get_node_or_null("AnimatedSprite2D") as AnimatedSprite2D
+		_check(effect_sprite != null, "explosion has an AnimatedSprite2D")
+		if effect_sprite != null:
+			_check(
+				effect_sprite.sprite_frames != null and effect_sprite.sprite_frames.get_frame_count("default") == ExplosionEffect.FRAME_COUNT,
+				"explosion default animation has %d frames" % ExplosionEffect.FRAME_COUNT
+			)
 
 
 func _test_beam() -> void:

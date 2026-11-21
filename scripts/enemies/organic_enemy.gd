@@ -51,7 +51,7 @@ func _setup_visual() -> void:
 			var atlas := AtlasTexture.new()
 			atlas.atlas = texture
 			atlas.region = Rect2(i * FRAME_SIZE.x, 0, FRAME_SIZE.x, FRAME_SIZE.y)
-			frames.add_sprite_frame("default", atlas)
+			frames.add_frame("default", atlas)
 	sprite.sprite_frames = frames
 	sprite.play("default")
 	# The task-1 export is the authored enemy sheet; tint it towards green for
