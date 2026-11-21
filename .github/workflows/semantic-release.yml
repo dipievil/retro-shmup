@@ -72,7 +72,7 @@ jobs:
           messages=$(git log --format='%s%n%b' "$range")
 
           bump=patch
-          if printf '%s\n' "$messages" | grep -Eq '^[a-zA-Z]+(\([^)]*\))?!:|^BREAKING CHANGE:'; then
+          if printf '%s\n' "$messages" | grep -Eq '^[a-zA-Z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE:'; then
             bump=major
           elif printf '%s\n' "$messages" | grep -Eq '^feat(\([^)]*\))?:'; then
             bump=minor
