@@ -76,7 +76,7 @@ jobs:
           - target: macos
             check_name: "Export (macos)"
             preset: macOS
-            output: build/macos/retro-shmup.app
+            output: build/macos/retro-shmup.zip
             artifact_path: build/macos/
             smoke: pack
     steps:
@@ -110,6 +110,17 @@ jobs:
         run: |
           mkdir -p "$(dirname "${{ matrix.output }}")"
           godot --headless --export-release "${{ matrix.preset }}" "${{ matrix.output }}"
+      - name: Install unzip (macOS only)
+        if: matrix.target == 'macos'
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends unzip
+      - name: Unpack macOS export
+        if: matrix.target == 'macos'
+        run: |
+          # Info-ZIP unzip keeps the executable bit; python zipfile drops it.
+          unzip -o -q "${{ matrix.output }}" -d "${{ matrix.artifact_path }}"
+          find "${{ matrix.artifact_path }}" -type f -name 'Retro SHMUP' -exec chmod 0755 {} +
       - name: Validate exported artifact
         run: |
           output="${{ matrix.output }}"
@@ -128,6 +139,20 @@ jobs:
             exit 1
           fi
           echo "Exported $output ($size $unit)"
+          if [ "${{ matrix.target }}" = "macos" ]; then
+            # Godot names the bundle from config/name, not from the zip filename.
+            app="$(find '${{ matrix.artifact_path }}' -maxdepth 1 -type d -name '*.app' -print -quit)"
+            if [ -z "$app" ]; then
+              echo "::error::no unpacked macOS app bundle found under '${{ matrix.artifact_path }}'"
+              exit 1
+            fi
+            pack="$(find '${{ matrix.artifact_path }}' -type f -name '*.pck' -print -quit)"
+            if [ -z "$pack" ]; then
+              echo "::error::no exported .pck found under '${{ matrix.artifact_path }}'"
+              exit 1
+            fi
+            echo "Verified unpacked $app and exported game data ($pack)"
+          fi
       - name: Smoke test exported build
         # Container jobs default to `sh -e`, so keep this POSIX-compatible.
         run: |
