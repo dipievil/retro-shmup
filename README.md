@@ -147,8 +147,12 @@ godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
 `tests/validate_*.py` failure, on audio asset validation failures and on any
 `tests/*_test.gd` suite that exits non-zero.
 
-CI (`.github/workflows/ci.yml`) runs the script on Godot 4.3 and 4.7.2, exports
-the Linux build with `export_presets.cfg` and uploads it as an artifact.
+CI (`.github/workflows/ci.yml`) runs the script on Godot 4.3 and 4.7.2 and exports
+Linux, Windows and macOS builds with `export_presets.cfg`. Artifacts are named
+`retro-shmup-<version>-<short-sha>-<target>`, where `<version>` is the `v` tag on
+tag pushes and `dev` otherwise; retention is 14 days. Windows/macOS executables
+cannot run on the Linux runner, so those jobs smoke-test the exported `.pck`
+with the Linux engine rather than claiming a native smoke.
 
 ## Demo builds
 
