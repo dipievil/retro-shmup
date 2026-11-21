@@ -185,6 +185,31 @@ jobs:
                       zf.write(path, os.path.relpath(path, src))
           PYEOF
             else
+              if [[ "$name" == *macos* ]]; then
+                # CI uploads the macOS bundle as one mode-preserving tarball
+                # inside the artifact directory. Unpack it before repackaging
+                # so the release asset contains the .app (and any external
+                # .pck) at its top level, never a nested archive.
+                inner=""
+                while IFS= read -r -d '' candidate; do
+                  if tar -tzf "$candidate" >/dev/null 2>&1; then
+                    if [ -n "$inner" ]; then
+                      echo "::error::Multiple inner macOS tarballs in $dir"
+                      exit 1
+                    fi
+                    inner="$candidate"
+                  fi
+                done < <(find "$dir" -mindepth 1 -maxdepth 1 -type f -print0 | sort -z)
+                if [ -n "$inner" ]; then
+                  echo "Unpacking inner macOS tarball $(basename "$inner")"
+                  tar -xzf "$inner" -C "$dir"
+                  rm -f "$inner"
+                  find "$dir" -type f -name 'Retro SHMUP' -exec chmod 0755 {} +
+                elif [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' -print -quit)" ]; then
+                  echo "::error::No macOS app bundle or inner tarball found in $dir"
+                  exit 1
+                fi
+              fi
               tar -czf "$archive" -C "$dir" .
             fi
             echo "Packaged ${name} -> ${archive}"

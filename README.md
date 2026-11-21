@@ -154,6 +154,11 @@ tag pushes and `dev` otherwise; retention is 14 days. Windows/macOS executables
 cannot run on the Linux runner, so those jobs smoke-test the exported `.pck`
 with the Linux engine rather than claiming a native smoke.
 
+Semantic Release repackages the published macOS `.tar.gz` so extracting it
+yields the `.app` bundle (named by the export preset, e.g. `retro-shmup.app/`)
+and any external `.pck` at the top level. The bundle executable keeps its
+executable bit and there is no inner tarball to unpack.
+
 ## Demo builds
 
 The Phase 1 demo is released as **0.0.1-demo** when the `v0.0.1-demo` tag is
