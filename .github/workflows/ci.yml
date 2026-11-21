@@ -152,6 +152,10 @@ jobs:
               exit 1
             fi
             echo "Verified unpacked $app and exported game data ($pack)"
+            # The ZIP is only needed for the export check above. Removing it
+            # after validation keeps the tarball free of a redundant nested ZIP.
+            rm -f "$output"
+            echo "Removed source ZIP $output"
           fi
       - name: Smoke test exported build
         # Container jobs default to `sh -e`, so keep this POSIX-compatible.

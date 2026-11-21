@@ -154,7 +154,9 @@ tag pushes and `dev` otherwise; retention is 14 days. Windows/macOS executables
 cannot run on the Linux runner, so those jobs smoke-test the exported `.pck`
 with the Linux engine rather than claiming a native smoke. The macOS CLI export
 writes `build/macos/retro-shmup.zip`; CI unpacks it into `build/macos/` (keeping
-the executable bit) before tarring the bundle for upload.
+the executable bit), validates the bundle and game data, then removes the ZIP
+before tarring. The uploaded tarball contains only the `.app` bundle and any
+external `.pck`.
 
 ## Demo builds
 
