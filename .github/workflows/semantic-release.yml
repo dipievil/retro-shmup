@@ -1,0 +1,249 @@
+name: Semantic Release
+
+# Versioned release path for `main`. Derives the next version from Conventional
+# Commit PR titles (squash-merge subjects) since the last vMAJOR.MINOR.PATCH tag
+# and publishes a GitHub Release with GitHub-generated notes.
+#
+# Tag format is strict semver: vMAJOR.MINOR.PATCH (no suffix). The separate demo
+# workflow (.github/workflows/release.yml, PR #9) owns the single literal tag
+# `v0.0.1-demo`; a strict semver tag can never be that string, so the two
+# release paths cannot collide. The baseline lookup below also filters tags
+# with an anchored regex, so the demo tag can never become a version baseline.
+#
+# Only `push` to `main` triggers this workflow: no pull-request events (in
+# particular no target-branch-context events), no tag trigger and no manual
+# dispatch. The only job holding a write token deliberately does not check
+# out or execute repository code.
+#
+# Artifact assumption: the multi-target export matrix (task-11, owner of
+# ci.yml / export_presets.cfg) uploads its builds with names matching
+# `retro-shmup-*` (the existing name is `retro-shmup-linux`; Windows/macOS
+# presets follow the same prefix). This workflow downloads those artifacts
+# from the successful CI run of the same commit by pattern and packages them;
+# it never duplicates the export matrix.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semantic-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Determine next version
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.next.outputs.changed }}
+      version: ${{ steps.next.outputs.version }}
+      tag: ${{ steps.next.outputs.tag }}
+      commits: ${{ steps.next.outputs.commits }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compute next semantic version
+        id: next
+        run: |
+          set -euo pipefail
+
+          # Anchored filter: `v0.0.1-demo` is NOT a valid baseline.
+          previous=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
+
+          if [ -n "$previous" ]; then
+            range="${previous}..HEAD"
+            count=$(git rev-list --count "$range")
+          else
+            range="HEAD"
+            count=$(git rev-list --count HEAD)
+          fi
+
+          if [ "$count" -eq 0 ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new commits since ${previous:-the beginning}; skipping release."
+            exit 0
+          fi
+
+          # Commit subjects on main are the merged PR titles (squash merges).
+          messages=$(git log --format='%s%n%b' "$range")
+
+          bump=patch
+          if printf '%s\n' "$messages" | grep -Eq '^[a-zA-Z]+(\([^)]*\))?!:|^BREAKING CHANGE:'; then
+            bump=major
+          elif printf '%s\n' "$messages" | grep -Eq '^feat(\([^)]*\))?:'; then
+            bump=minor
+          fi
+
+          if [ -z "$previous" ]; then
+            major=0; minor=0; patch=0
+          else
+            IFS=. read -r maj min pat <<< "${previous#v}"
+            major=$((10#$maj)); minor=$((10#$min)); patch=$((10#$pat))
+          fi
+
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+
+          version="${major}.${minor}.${patch}"
+          tag="v${version}"
+
+          # Defense in depth: only strict semver tags are ever published.
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Refusing to publish non-semver tag '$tag'"
+            exit 1
+          fi
+          if [ "$tag" = 'v0.0.1-demo' ]; then
+            echo "::error::Refusing to collide with the demo release tag"
+            exit 1
+          fi
+
+          {
+            echo "changed=true"
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "commits=$count"
+            echo "previous=${previous:-none}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Next release: $tag ($bump bump, $count commit(s) since ${previous:-none})"
+
+  package:
+    name: Package build artifacts
+    needs: version
+    if: needs.version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      artifact_count: ${{ steps.package.outputs.artifact_count }}
+    steps:
+      - name: Find the successful CI run for this commit
+        id: ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            run_id=$(gh api "repos/${GH_REPO}/actions/runs?head_sha=${SHA}&event=push&status=success&per_page=100" \
+              --jq '.workflow_runs[] | select(.name == "CI") | .id' | head -n1 || true)
+            if [ -n "$run_id" ]; then
+              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+              echo "Using CI run $run_id for $SHA"
+              exit 0
+            fi
+            echo "Waiting for CI run on $SHA (attempt ${attempt}/30)..."
+            sleep 20
+          done
+          echo "::error::No successful CI run found for $SHA"
+          exit 1
+
+      - name: Download multi-target artifacts from CI
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.ci.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: retro-shmup-*
+          path: artifacts
+
+      - name: Create per-platform archives and SHA256SUMS
+        id: package
+        run: |
+          set -euo pipefail
+          workspace="$PWD"
+          mkdir -p dist
+          count=0
+          # With merge-multiple disabled, each artifact lands in its own
+          # directory named after the artifact (e.g. retro-shmup-linux).
+          while IFS= read -r -d '' dir; do
+            name=$(basename "$dir")
+            case "$name" in
+              *windows*) ext=zip ;;
+              *) ext=tar.gz ;;
+            esac
+            archive="${workspace}/dist/${name}.${ext}"
+            if [ "$ext" = "zip" ]; then
+              # Python stdlib keeps this dependency-free on the runner.
+              python3 - "$dir" "$archive" <<'PYEOF'
+          import os, sys, zipfile
+          src, out = sys.argv[1], sys.argv[2]
+          with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
+              for root, dirs, files in os.walk(src):
+                  dirs.sort()
+                  for filename in sorted(files):
+                      path = os.path.join(root, filename)
+                      zf.write(path, os.path.relpath(path, src))
+          PYEOF
+            else
+              tar -czf "$archive" -C "$dir" .
+            fi
+            echo "Packaged ${name} -> ${archive}"
+            count=$((count + 1))
+          done < <(find artifacts -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No 'retro-shmup-*' artifacts found in CI run"
+            exit 1
+          fi
+
+          (cd dist && find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
+            | sort | xargs -d '\n' sha256sum > SHA256SUMS)
+          cat dist/SHA256SUMS
+          echo "artifact_count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Upload packaged release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: semantic-release-packages
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [version, package]
+    if: needs.version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Deliberately NO actions/checkout here: the only job with a write token
+      # never checks out or executes repository-provided code.
+      - name: Download packaged release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: semantic-release-packages
+          path: dist
+      - name: Verify checksums
+        run: cd dist && sha256sum -c SHA256SUMS
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Refusing to publish non-semver tag '$TAG'"
+            exit 1
+          fi
+          # ./dist/ prefix keeps asset paths from being parsed as gh flags.
+          mapfile -t assets < <(find dist -maxdepth 1 -type f -printf './dist/%f\n' | sort)
+          gh release create "$TAG" \
+            --repo "$GH_REPO" \
+            --target "$TARGET_SHA" \
+            --title "$VERSION" \
+            --generate-notes \
+            "${assets[@]}"
+          echo "Published $TAG with ${#assets[@]} asset(s)"
