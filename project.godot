@@ -29,6 +29,10 @@ window/stretch/scale_mode="integer"
 
 [rendering]
 
+; Required to export the universal (Intel + Apple Silicon) macOS preset
+; from a Linux CI runner: ETC2/ASTC is otherwise imported only on hosts
+; that prefer it, and Godot rejects universal macOS exports without it.
+textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 ; 0 = Nearest, 1 = Linear (Godot 4.x canvas texture filter enum).
