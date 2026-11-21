@@ -1,18 +1,49 @@
 class_name PlayerShip
-class_name PlayerShip
 extends Area2D
 
 ## Player ship controller.
 ## Handles movement, depth (zoom) layers, damage control (hull + shields),
-## and weapon firing. Based on game_design.md specifications.
+## and weapon firing. Based on docs/game_design.md specifications.
+##
+## Depth is the visual/mechanical representation of the "Screen multiple
+## action layers" concept: the middle layer is the main gameplay layer and
+## R1 / L1 (zoom_in / zoom_out) move the ship toward the front or back layer
+## to evade enemy fire. Enemy ships enter from any layer but converge on the
+## player's current layer.
+##
+## TODO(task-2): replace the Polygon2D placeholder in player_ship.tscn with
+## the GDAS-1 sprite (assets/sprites/player/gdas1.png + json-array metadata)
+## once that asset is available. The controller does not depend on the
+## specific visual node, so no logic changes should be needed.
 
-const ProjectileScene := preload("res://scenes/weapons/projectile.tscn")
+const LaserProjectileScene := preload("res://scenes/weapons/laser_projectile.tscn")
+const MissileProjectileScene := preload("res://scenes/weapons/missile_projectile.tscn")
+const BombProjectileScene := preload("res://scenes/weapons/bomb_projectile.tscn")
+const _WEAPON_ORDER := ["laser", "missile", "bomb"]
 
 # ---- Signals ----
 signal hull_changed(new_hull: int)
 signal shield_changed(side: String, new_value: int)
 signal depth_changed(new_depth: float)
+signal layer_changed(new_layer: int)
+signal bomb_ammo_changed(current: int, max_ammo: int)
 signal destroyed
+
+# ---- Enums ----
+## Discrete action layers, ordered back -> front.
+## MIDDLE (1) is the default gameplay layer per docs/game_design.md.
+enum ActionLayer { BACK = 0, MIDDLE = 1, FRONT = 2 }
+
+# ---- Constants ----
+const _LAYER_DEPTH_BACK: float = 0.0
+const _LAYER_DEPTH_MIDDLE: float = 0.5
+const _LAYER_DEPTH_FRONT: float = 1.0
+const _LAYER_THRESHOLD_BACK_MIDDLE: float = (_LAYER_DEPTH_BACK + _LAYER_DEPTH_MIDDLE) / 2.0
+const _LAYER_THRESHOLD_MIDDLE_FRONT: float = (_LAYER_DEPTH_MIDDLE + _LAYER_DEPTH_FRONT) / 2.0
+const _DEPTH_SCALE_MIN := 0.6
+const _DEPTH_SCALE_MAX := 1.4
+const _DEPTH_OPACITY_MIN := 0.5
+const _INVINCIBLE_TIME := 1.0
 
 # ---- Exported ----
 @export var base_speed: float = 200.0
@@ -23,7 +54,7 @@ signal destroyed
 @export var shield_regen_delay: float = 5.0
 @export var shield_regen_rate: float = 0.5
 
-# ---- Internal: Damage ----
+# ---- Internal: Damage control (GDAS-1: hull 3, front 3, back 3) ----
 var max_hull: int = 3
 var current_hull: int = 3
 var max_front_shield: int = 3
@@ -34,6 +65,8 @@ var current_back_shield: int = 3
 # ---- Internal: Depth/Layers ----
 var depth: float = 0.5  # 0 = back layer, 0.5 = middle, 1.0 = front
 var _target_depth: float = 0.5
+var current_layer: int = ActionLayer.MIDDLE
+var _last_emitted_depth: float = -1.0
 
 # ---- Internal: Speed ----
 var speed_level: int = 1
@@ -50,12 +83,6 @@ var _invincible_timer: float = 0.0
 var _is_invincible: bool = false
 var _ship_id: String = "gdas_1"
 
-# ---- Constants ----
-const _DEPTH_SCALE_MIN := 0.6
-const _DEPTH_SCALE_MAX := 1.4
-const _DEPTH_OPACITY_MIN := 0.5
-const _INVINCIBLE_TIME := 1.0
-
 
 func _ready() -> void:
 	_load_ship_data()
@@ -65,6 +92,8 @@ func _ready() -> void:
 	area_entered.connect(_on_area_entered)
 	add_to_group("player")
 	GameManager.player = self
+	current_layer = _layer_for_depth(depth)
+	_apply_depth_visuals()
 
 
 func _load_ship_data() -> void:
@@ -88,35 +117,55 @@ func _setup_weapons() -> void:
 		if weapon_node:
 			add_child(weapon_node)
 			_weapons[wname] = weapon_node
+	# Ships without the laser (future loadouts) still get a valid active weapon.
+	if not _weapons.has(_active_weapon) and not _weapons.is_empty():
+		_active_weapon = _weapons.keys()[0]
 
 
+## Cadence values follow game_design.md: rapid laser, slow homing missile,
+## limited bomb. SFX/sprites are resolved by weapon_kind (optional assets).
 func _create_weapon(wname: String) -> Node2D:
-		match wname:
+	var weapon: Weapon
+	match wname:
 		"laser":
-			var laser := Laser.new()
-			laser.fire_rate = 0.12
-			laser.damage = 1
-			laser.projectile_speed = 700.0
-			laser.projectile_scene = ProjectileScene
-			laser.max_level = 3
-			return laser
+			weapon = Laser.new()
+			weapon.fire_rate = 0.12
+			weapon.damage = 1
+			weapon.projectile_speed = 700.0
+			weapon.projectile_lifetime = 1.5
+			weapon.projectile_scene = LaserProjectileScene
+			weapon.weapon_kind = wname
+			weapon.max_level = 3
 		"missile":
-			var missile := Weapon.new()
+			var missile := Missile.new()
 			missile.fire_rate = 0.8
 			missile.damage = 3
 			missile.projectile_speed = 350.0
-			missile.projectile_scene = ProjectileScene
+			missile.projectile_lifetime = 2.5
+			missile.projectile_scene = MissileProjectileScene
+			missile.weapon_kind = wname
+			missile.homing_radius = 280.0
+			missile.turn_rate = 4.5
 			missile.max_level = 3
-			return missile
+			weapon = missile
 		"bomb":
-			var bomb := Weapon.new()
+			var bomb := Bomb.new()
 			bomb.fire_rate = 2.5
 			bomb.damage = 5
 			bomb.projectile_speed = 200.0
-			bomb.projectile_scene = ProjectileScene
+			bomb.projectile_lifetime = 2.0
+			bomb.projectile_scene = BombProjectileScene
+			bomb.weapon_kind = wname
+			bomb.max_ammo = 3
+			bomb.recharge_time = 8.0
+			bomb.bombs_per_drop = 5
+			bomb.explosion_radius = 48.0
 			bomb.max_level = 1
-			return bomb
-	return null
+			bomb.ammo_changed.connect(_on_bomb_ammo_changed)
+			weapon = bomb
+		_:
+			return null
+	return weapon
 
 
 func _process(delta: float) -> void:
@@ -160,35 +209,94 @@ func _cycle_speed() -> void:
 		speed_level = 1
 
 
-# ---- Depth/Layer System ----
+# ---- Depth / Action-layer system ----
 func _handle_depth(delta: float) -> void:
+	# zoom_in = R1 (gamepad) / E (keyboard), zoom_out = L1 / Q.
 	if Input.is_action_just_pressed("zoom_in"):
-		_target_depth = clampf(_target_depth + depth_step, min_depth, max_depth)
+		change_depth(depth_step)
 	if Input.is_action_just_pressed("zoom_out"):
-		_target_depth = clampf(_target_depth - depth_step, min_depth, max_depth)
+		change_depth(-depth_step)
 
-	depth = lerp(depth, _target_depth, zoom_speed * delta)
+	# move_toward cannot overshoot the clamped target on a long frame,
+	# unlike lerp(depth, target, zoom_speed * delta).
+	depth = move_toward(depth, _target_depth, zoom_speed * delta)
+	_update_layer_from_depth()
 	_apply_depth_visuals()
 
 
-func _apply_depth_visuals() -> void:
-	var scale_mult := lerpf(_DEPTH_SCALE_MIN, _DEPTH_SCALE_MAX, depth)
-	scale = Vector2(scale_mult, scale_mult)
-	modulate.a = lerpf(_DEPTH_OPACITY_MIN, 1.0, depth)
-	depth_changed.emit(depth)
+## Change the requested depth, clamped to [min_depth, max_depth].
+## current_layer follows the interpolated depth in _handle_depth().
+## Public so other systems (and tests) can drive the layer mechanic directly.
+func change_depth(delta: float) -> void:
+	_target_depth = clampf(_target_depth + delta, min_depth, max_depth)
+
+
+## Target a discrete action layer (BACK=0, MIDDLE=1, FRONT=2).
+## The target depth is clamped to [min_depth, max_depth]; current_layer and
+## layer_changed update as the ship interpolates there.
+func set_action_layer(layer: int) -> void:
+	var clamped := clampi(layer, ActionLayer.BACK, ActionLayer.FRONT)
+	_target_depth = clampf(_depth_for_layer(clamped), min_depth, max_depth)
+
+
+func get_action_layer() -> int:
+	return current_layer
+
+
+func get_target_depth() -> float:
+	return _target_depth
 
 
 func get_depth() -> float:
 	return depth
 
 
+func _depth_for_layer(layer: int) -> float:
+	match layer:
+		ActionLayer.BACK:
+			return _LAYER_DEPTH_BACK
+		ActionLayer.MIDDLE:
+			return _LAYER_DEPTH_MIDDLE
+		ActionLayer.FRONT:
+			return _LAYER_DEPTH_FRONT
+	return _LAYER_DEPTH_MIDDLE
+
+
+func _layer_for_depth(value: float) -> int:
+	if value < _LAYER_THRESHOLD_BACK_MIDDLE:
+		return ActionLayer.BACK
+	if value < _LAYER_THRESHOLD_MIDDLE_FRONT:
+		return ActionLayer.MIDDLE
+	return ActionLayer.FRONT
+
+
+func _update_layer_from_depth() -> void:
+	var new_layer := _layer_for_depth(depth)
+	if new_layer != current_layer:
+		current_layer = new_layer
+		layer_changed.emit(current_layer)
+
+
+func _apply_depth_visuals() -> void:
+	var scale_mult := lerpf(_DEPTH_SCALE_MIN, _DEPTH_SCALE_MAX, depth)
+	scale = Vector2(scale_mult, scale_mult)
+	modulate.a = lerpf(_DEPTH_OPACITY_MIN, 1.0, depth)
+	if not is_equal_approx(depth, _last_emitted_depth):
+		_last_emitted_depth = depth
+		depth_changed.emit(depth)
+
+
 # ---- Firing ----
 func _handle_firing() -> void:
+	# Held fire uses the active weapon; each Weapon enforces its own cadence.
 	if Input.is_action_pressed("fire"):
-		_fire_weapon("laser")
+		_fire_weapon(_active_weapon)
+	# Direct-fire shortcuts from the existing skeleton also select that weapon.
 	if Input.is_action_just_pressed("fire_missile") and _weapons.has("missile"):
+		switch_weapon("missile")
 		_fire_weapon("missile")
 	if Input.is_action_just_pressed("fire_bomb") and _weapons.has("bomb"):
+		switch_weapon("bomb")
 		_fire_weapon("bomb")
 
 
@@ -201,18 +309,49 @@ func _fire_weapon(wname: String) -> void:
 
 
 func switch_weapon(wname: String) -> void:
-	if _weapons.has(wname):
-		_active_weapon = wname
+	if not _weapons.has(wname) or _active_weapon == wname:
+		return
+	_active_weapon = wname
+	var weapon: Weapon = _weapons[wname]
+	GameManager.weapon_changed.emit(wname, weapon.current_level)
+
+
+## Cycles through only the weapons this ship actually carries.
+func cycle_weapon(step: int) -> void:
+	var available: Array[String] = []
+	for wname in _WEAPON_ORDER:
+		if _weapons.has(wname):
+			available.append(wname)
+	if available.is_empty():
+		return
+	var index := available.find(_active_weapon)
+	if index < 0:
+		index = 0
+	else:
+		index = wrapi(index + step, 0, available.size())
+	switch_weapon(available[index])
 
 
 func get_active_weapon() -> String:
 	return _active_weapon
 
 
+func get_weapon_ammo(wname: String) -> Dictionary:
+	if not _weapons.has(wname) or not (_weapons[wname] is Bomb):
+		return {}
+	var bomb: Bomb = _weapons[wname]
+	return {"current": bomb.ammo, "max": bomb.max_ammo}
+
+
 func upgrade_weapon(wname: String) -> void:
 	if _weapons.has(wname):
 		var w: Weapon = _weapons[wname]
 		w.upgrade()
+		GameManager.weapon_changed.emit(wname, w.current_level)
+
+
+func _on_bomb_ammo_changed(current: int, max_ammo: int) -> void:
+	bomb_ammo_changed.emit(current, max_ammo)
 
 
 # ---- Damage Control ----
@@ -233,11 +372,11 @@ func _handle_shield_regen(delta: float) -> void:
 func _handle_invincibility(delta: float) -> void:
 	if _is_invincible:
 		_invincible_timer -= delta
-		# Flicker effect
+		# Flicker effect; keep the alpha supplied by the depth visuals.
 		modulate.r = 0.5 if fmod(_invincible_timer, 0.1) < 0.05 else 1.0
 		if _invincible_timer <= 0.0:
 			_is_invincible = false
-			modulate = Color.WHITE
+			modulate = Color(1, 1, 1, modulate.a)
 
 
 func take_damage(amount: int, from_front: bool = true) -> void:
@@ -295,3 +434,16 @@ func _input(event: InputEvent) -> void:
 			GameManager.change_state(GameManager.GameState.PAUSED)
 		elif GameManager.current_state == GameManager.GameState.PAUSED:
 			GameManager.change_state(GameManager.GameState.PLAYING)
+	if GameManager.current_state != GameManager.GameState.PLAYING:
+		return
+	# Weapon switching: cycle with R/T, direct select with 1/2/3.
+	if event.is_action_pressed("next_weapon"):
+		cycle_weapon(1)
+	elif event.is_action_pressed("prev_weapon"):
+		cycle_weapon(-1)
+	elif event.is_action_pressed("select_laser"):
+		switch_weapon("laser")
+	elif event.is_action_pressed("select_missile"):
+		switch_weapon("missile")
+	elif event.is_action_pressed("select_bomb"):
+		switch_weapon("bomb")

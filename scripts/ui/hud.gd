@@ -41,12 +41,9 @@ func _build_ui() -> void:
 	stats_vbox.custom_minimum_size = Vector2(140, 80)
 	root.add_child(stats_vbox)
 
-	_hull_bar = _make_bar("Hull")
-	_front_shield_bar = _make_bar("Front")
-	_back_shield_bar = _make_bar("Back")
-	stats_vbox.add_child(_hull_bar)
-	stats_vbox.add_child(_front_shield_bar)
-	stats_vbox.add_child(_back_shield_bar)
+	_hull_bar = _add_bar(stats_vbox, "Hull")
+	_front_shield_bar = _add_bar(stats_vbox, "Front")
+	_back_shield_bar = _add_bar(stats_vbox, "Back")
 
 	# Top-right: score + stage
 	var info_vbox := VBoxContainer.new()
@@ -78,7 +75,9 @@ func _layer_setup() -> void:
 	layer = 10
 
 
-func _make_bar(label_text: String) -> ProgressBar:
+## Builds a label + bar row and adds the row to parent once.
+## Returns the bar so the value can still be updated via the _*_bar fields.
+func _add_bar(parent: Node, label_text: String) -> ProgressBar:
 	var container := HBoxContainer.new()
 
 	var label := Label.new()
@@ -94,6 +93,7 @@ func _make_bar(label_text: String) -> ProgressBar:
 	bar.value = 3
 	container.add_child(bar)
 
+	parent.add_child(container)
 	return bar
 
 
