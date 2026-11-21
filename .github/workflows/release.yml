@@ -1,0 +1,110 @@
+name: Release
+
+# Phase 1 demo release path. Push the v0.0.1-demo tag after merging to dev and
+# this publishes the Linux demo. The build steps mirror ci.yml's headless build
+# job; the lint/test matrix stays in ci.yml (run_all.sh is the release gate).
+on:
+  push:
+    tags:
+      - 'v0.0.1-demo'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to publish (e.g. v0.0.1-demo)'
+        required: true
+        type: string
+        default: 'v0.0.1-demo'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build demo (Linux)
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      # On a tag push github.ref is the tag; on manual runs the version input
+      # selects the tag so the checked-out source matches the published assets.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
+      - name: Install Python 3 for the asset validators
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3
+      # The image ships export templates under /root; container jobs run with
+      # HOME=/github/home, so link them where Godot looks for them.
+      - name: Link export templates
+        run: |
+          mkdir -p ~/.local/share/godot
+          ln -sfn /root/.local/share/godot/export_templates ~/.local/share/godot/export_templates
+      - name: Import, validators and test suites
+        run: tools/run_all.sh
+      - name: Export Linux demo
+        run: |
+          mkdir -p build/linux
+          godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
+      - name: Smoke test the exported binary
+        # Container jobs default to `sh -e`, so keep this POSIX-compatible.
+        run: |
+          if timeout 60 ./build/linux/retro-shmup.x86_64 --headless --quit-after 120 > smoke.log 2>&1; then
+            cat smoke.log
+          else
+            status=$?
+            cat smoke.log
+            echo "::error::exported binary exited ${status}"
+            exit "${status}"
+          fi
+          if grep -qE 'SCRIPT ERROR|Parse Error|Failed to load script' smoke.log; then
+            echo "::error::exported build logged a script error"
+            exit 1
+          fi
+      # embed_pck=false in export_presets.cfg: the binary needs its .pck next
+      # to it, so both files are attached and both are hashed.
+      - name: Generate SHA256SUMS
+        run: |
+          cd build/linux
+          sha256sum retro-shmup.x86_64 retro-shmup.pck > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-linux
+          path: build/linux/
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: demo-linux
+          path: build/linux/
+      - name: Verify checksums
+        run: cd build/linux && sha256sum -c SHA256SUMS
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+        run: |
+          release_name="${RELEASE_TAG#v}"
+          cat > release-notes.md <<EOF
+          Phase 1 demo (${release_name}) - GDAS-1 movement/zoom with laser, missile and bomb weapons. No HUD, no audio yet.
+
+          Download retro-shmup.x86_64 and retro-shmup.pck, keep them in the same directory and run the binary.
+          Verify the download with: sha256sum -c SHA256SUMS
+          EOF
+          gh release create "$RELEASE_TAG" \
+            --title "$release_name" \
+            --notes-file release-notes.md \
+            build/linux/retro-shmup.x86_64 build/linux/retro-shmup.pck build/linux/SHA256SUMS
