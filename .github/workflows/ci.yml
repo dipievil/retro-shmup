@@ -50,7 +50,9 @@ jobs:
         run: tools/run_all.sh
 
   export:
-    name: Export (${{ matrix.target }})
+    # The Linux job must keep the legacy `Build (Linux)` context: it is a
+    # required status check on dev, and older open PRs still emit that name.
+    name: ${{ matrix.check_name }}
     runs-on: ubuntu-latest
     # Project is pinned to 4.3; the test matrix still covers 4.7.2.
     container:
@@ -60,16 +62,19 @@ jobs:
       matrix:
         include:
           - target: linux
+            check_name: "Build (Linux)"
             preset: Linux
             output: build/linux/retro-shmup.x86_64
             artifact_path: build/linux/
             smoke: native
           - target: windows
+            check_name: "Export (windows)"
             preset: Windows
             output: build/windows/retro-shmup.exe
             artifact_path: build/windows/
             smoke: pack
           - target: macos
+            check_name: "Export (macos)"
             preset: macOS
             output: build/macos/retro-shmup.app
             artifact_path: build/macos/
