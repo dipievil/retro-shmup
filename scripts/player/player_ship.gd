@@ -411,7 +411,17 @@ func _start_invincibility() -> void:
 	_invincible_timer = _INVINCIBLE_TIME
 
 
+## Immediate death entry point for mutual-destruction enemies (kamikazes).
+## Bypasses hull/shields and invincibility frames, unlike take_damage().
+func explode() -> void:
+	if is_queued_for_deletion():
+		return
+	_die()
+
+
 func _die() -> void:
+	if is_queued_for_deletion():
+		return
 	destroyed.emit()
 	GameManager.game_over()
 	queue_free()
