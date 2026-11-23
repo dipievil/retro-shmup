@@ -102,6 +102,20 @@ retro-shmup/
 | Space Quantum | 1 | 1 | 1 | 1 | Laser |
 | GDAS-1 | 3 | 3 | 3 | 3 | Laser, Missile, Bomb |
 
+### Stage 1 (training)
+
+`scenes/main.tscn` starts the demo directly in the training stage
+(`scenes/stages/stage_1.tscn`) with GDAS-1 and all configured controls and
+weapons. Stage 1 keeps `StageBase`'s parallax layers and spawn queue; its four
+scout/interceptor waves are defined in `WAVE_TABLE` in
+`scripts/stages/stage_1.gd` and announced with `wave_started`. Reaching the end
+of the timeline (or clearing the last wave) emits `stage_completed` once; main
+then instantiates `scenes/cutscenes/stage_1_end.tscn`, a placeholder
+Control/AnimationPlayer cutscene carrying the stage-1 story beat from the
+parent repository's `docs/story.md`. The cutscene art and audio are deliberate
+MVP placeholders; no parallax, enemy or cutscene code from unmerged branches is
+required.
+
 ### Physics Layers
 
 | Layer | Name |
