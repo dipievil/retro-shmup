@@ -28,6 +28,7 @@ signal depth_changed(new_depth: float)
 signal layer_changed(new_layer: int)
 signal bomb_ammo_changed(current: int, max_ammo: int)
 signal destroyed
+signal ship_destroyed
 
 # ---- Enums ----
 ## Discrete action layers, ordered back -> front.
@@ -53,14 +54,49 @@ const _INVINCIBLE_TIME := 1.0
 @export var zoom_speed: float = 2.0
 @export var shield_regen_delay: float = 5.0
 @export var shield_regen_rate: float = 0.5
+# Regeneration is not part of the design; it stays off unless explicitly enabled.
+@export var shield_regen_enabled: bool = false
 
 # ---- Internal: Damage control (GDAS-1: hull 3, front 3, back 3) ----
-var max_hull: int = 3
-var current_hull: int = 3
-var max_front_shield: int = 3
-var current_front_shield: int = 3
-var max_back_shield: int = 3
-var current_back_shield: int = 3
+# DamageControl is the single source of truth. These properties forward to it so
+# the existing PlayerShip API (used by stages/HUD/tests) keeps working.
+var damage_control: DamageControl = DamageControl.new()
+
+var max_hull: int:
+	get:
+		return damage_control.max_hull
+	set(value):
+		damage_control.max_hull = value
+
+var current_hull: int:
+	get:
+		return damage_control.current_hull
+	set(value):
+		damage_control.current_hull = value
+
+var max_front_shield: int:
+	get:
+		return damage_control.max_front_shield
+	set(value):
+		damage_control.max_front_shield = value
+
+var current_front_shield: int:
+	get:
+		return damage_control.current_front_shield
+	set(value):
+		damage_control.current_front_shield = value
+
+var max_back_shield: int:
+	get:
+		return damage_control.max_back_shield
+	set(value):
+		damage_control.max_back_shield = value
+
+var current_back_shield: int:
+	get:
+		return damage_control.current_back_shield
+	set(value):
+		damage_control.current_back_shield = value
 
 # ---- Internal: Depth/Layers ----
 var depth: float = 0.5  # 0 = back layer, 0.5 = middle, 1.0 = front
@@ -82,6 +118,14 @@ var _shield_regen_timer: float = 0.0
 var _invincible_timer: float = 0.0
 var _is_invincible: bool = false
 var _ship_id: String = "gdas_1"
+
+
+func _init() -> void:
+	# Connect in _init so apply_damage() works even before _ready() (e.g. in
+	# headless model tests that instantiate PlayerShip directly).
+	damage_control.shield_changed.connect(_on_damage_shield_changed)
+	damage_control.hull_changed.connect(_on_damage_hull_changed)
+	damage_control.ship_destroyed.connect(_on_damage_ship_destroyed)
 
 
 func _ready() -> void:
@@ -356,17 +400,17 @@ func _on_bomb_ammo_changed(current: int, max_ammo: int) -> void:
 
 # ---- Damage Control ----
 func _handle_shield_regen(delta: float) -> void:
+	if not shield_regen_enabled:
+		return
 	if current_front_shield < max_front_shield or current_back_shield < max_back_shield:
 		_shield_regen_timer += delta
 		if _shield_regen_timer >= shield_regen_delay:
 			if current_front_shield < max_front_shield:
-				current_front_shield = mini(current_front_shield + int(ceil(shield_regen_rate)), max_front_shield)
-				shield_changed.emit("front", current_front_shield)
-				GameManager.shield_changed.emit(0, "front", current_front_shield)
+				damage_control.set_shield_value(true, mini(current_front_shield + int(ceil(shield_regen_rate)), max_front_shield))
+				damage_control.shield_changed.emit(DamageControl.SIDE_FRONT, current_front_shield)
 			if current_back_shield < max_back_shield:
-				current_back_shield = mini(current_back_shield + int(ceil(shield_regen_rate)), max_back_shield)
-				shield_changed.emit("back", current_back_shield)
-				GameManager.shield_changed.emit(0, "back", current_back_shield)
+				damage_control.set_shield_value(false, mini(current_back_shield + int(ceil(shield_regen_rate)), max_back_shield))
+				damage_control.shield_changed.emit(DamageControl.SIDE_BACK, current_back_shield)
 
 
 func _handle_invincibility(delta: float) -> void:
@@ -379,31 +423,35 @@ func _handle_invincibility(delta: float) -> void:
 			modulate = Color(1, 1, 1, modulate.a)
 
 
+## Direction-aware damage entry point. The matching shield absorbs first and
+## the remainder reaches the hull; the model owns the pools and the signals.
+func apply_damage(amount: int, direction = DamageControl.Direction.FRONT) -> Dictionary:
+	var result := damage_control.apply_damage(amount, direction)
+	if int(result.get("shield_damage", 0)) > 0 or int(result.get("hull_damage", 0)) > 0:
+		_shield_regen_timer = 0.0
+	return result
+
+
+## Collision-facing wrapper: keeps the brief post-hit invincibility window.
 func take_damage(amount: int, from_front: bool = true) -> void:
 	if _is_invincible:
 		return
-	_shield_regen_timer = 0.0
-
-	if from_front and current_front_shield > 0:
-		current_front_shield = maxi(0, current_front_shield - amount)
-		shield_changed.emit("front", current_front_shield)
-		GameManager.shield_changed.emit(0, "front", current_front_shield)
-		_start_invincibility()
-		return
-	if not from_front and current_back_shield > 0:
-		current_back_shield = maxi(0, current_back_shield - amount)
-		shield_changed.emit("back", current_back_shield)
-		GameManager.shield_changed.emit(0, "back", current_back_shield)
-		_start_invincibility()
-		return
-
-	# Shields down — damage hull
-	current_hull = maxi(0, current_hull - amount)
-	hull_changed.emit(current_hull)
-	GameManager.hull_changed.emit(0, current_hull)
+	apply_damage(amount, from_front)
 	_start_invincibility()
-	if current_hull <= 0:
-		_die()
+
+
+func _on_damage_shield_changed(side: String, new_value: int) -> void:
+	shield_changed.emit(side, new_value)
+	GameManager.shield_changed.emit(0, side, new_value)
+
+
+func _on_damage_hull_changed(new_hull: int) -> void:
+	hull_changed.emit(new_hull)
+	GameManager.hull_changed.emit(0, new_hull)
+
+
+func _on_damage_ship_destroyed() -> void:
+	_die()
 
 
 func _start_invincibility() -> void:
@@ -412,6 +460,7 @@ func _start_invincibility() -> void:
 
 
 func _die() -> void:
+	ship_destroyed.emit()
 	destroyed.emit()
 	GameManager.game_over()
 	queue_free()

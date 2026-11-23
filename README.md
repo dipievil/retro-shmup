@@ -89,6 +89,7 @@ retro-shmup/
 ### Core Systems
 
 - **Player Ship** (`player_ship.gd`): Movement, depth/zoom layers, damage control (hull + front/back shields), weapon management
+- **Damage Control** (`damage_control.gd`): HUD-independent model with three pools (GDAS-1: hull 3, front shield 3, back shield 3). `apply_damage(amount, direction)` drains the shield facing the hit (`"front"`/`"back"`, `Direction`, bool or incoming `Vector2`); overflow reaches the hull. Signals: `shield_changed(side, value)`, `hull_changed(value)`, `ship_destroyed`. `PlayerShip.apply_damage()` exposes the model; `take_damage(amount, from_front)` stays for collisions. Shield regeneration is off by default (`shield_regen_enabled` on the ship).
 - **Weapon System** (`weapon.gd`, `laser.gd`, `projectile.gd`): Base weapon class with fire rate, cooldown, upgrade levels
 - **Enemy System** (`base_enemy.gd`): Virtual AI interface, health, depth/layer support
 - **Stage System** (`stage_base.gd`): Parallax scrolling, enemy spawning queue, layer scaling
