@@ -16,11 +16,13 @@ name: Semantic Release
 # out or execute repository code.
 #
 # Artifact assumption: the multi-target export matrix (task-11, owner of
-# ci.yml / export_presets.cfg) uploads its builds with names matching
-# `retro-shmup-*` (the existing name is `retro-shmup-linux`; Windows/macOS
-# presets follow the same prefix). This workflow downloads those artifacts
-# from the successful CI run of the same commit by pattern and packages them;
-# it never duplicates the export matrix.
+# ci.yml / export_presets.cfg) uploads its builds as
+# `retro-shmup-<version>-<short-sha>-<target>`. On pushes to main CI uses `dev`
+# as the version token; on tag pushes it uses the tag version. This workflow
+# downloads the artifacts from the successful CI run of the same commit by the
+# `retro-shmup-*` pattern, renames the dev-named directories to the computed
+# semantic version `retro-shmup-X.Y.Z-<sha>-<target>` and packages them; it
+# never duplicates the export matrix.
 
 on:
   push:
@@ -155,6 +157,39 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           pattern: retro-shmup-*
           path: artifacts
+
+      - name: Rename dev artifacts to the release version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Refusing to rename artifacts with non-semver version '$VERSION'"
+            exit 1
+          fi
+          # CI names main-push artifacts retro-shmup-dev-<sha>-<target>; release
+          # assets must carry the computed version instead of the `dev` token.
+          while IFS= read -r -d '' dir; do
+            name=$(basename "$dir")
+            if [[ "$name" =~ ^retro-shmup-[^-]+-([0-9a-f]{7,40})-([^-]+)$ ]]; then
+              sha="${BASH_REMATCH[1]}"
+              target="${BASH_REMATCH[2]}"
+            else
+              echo "::error::Unexpected artifact name '$name'"
+              exit 1
+            fi
+            dest="artifacts/retro-shmup-${VERSION}-${sha}-${target}"
+            if [ "$dest" = "$dir" ]; then
+              echo "Artifact $name already uses release version $VERSION"
+              continue
+            fi
+            if [ -e "$dest" ]; then
+              echo "::error::Destination $dest already exists"
+              exit 1
+            fi
+            mv "$dir" "$dest"
+            echo "Renamed $name -> $(basename "$dest")"
+          done < <(find artifacts -mindepth 1 -maxdepth 1 -type d -name 'retro-shmup-*' -print0 | sort -z)
 
       - name: Create per-platform archives and SHA256SUMS
         id: package
