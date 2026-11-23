@@ -5,11 +5,11 @@ name: Semantic Release
 # and publishes a GitHub Release with GitHub-generated notes.
 #
 # Tag format is strict semver: vMAJOR.MINOR.PATCH (no suffix). Demo tags
-# (vX.Y.Z-demo) are version markers for tools/build-demo.sh only; they never
-# publish a GitHub Release from a tag push. A strict semver tag can never have
-# that suffix, so the two paths cannot collide. The baseline lookup below also
-# filters tags with an anchored regex, so demo tags can never become a
-# version baseline.
+# (vX.Y.Z-demo) are version markers for the parent project's tools/build-demo.sh
+# only; they never publish a GitHub Release from a tag push. A strict semver tag
+# can never have that suffix, so the two paths cannot collide. The baseline
+# lookup below also filters tags with an anchored regex, so demo tags can never
+# become a version baseline.
 #
 # Only `push` to `main` triggers this workflow: no pull-request events (in
 # particular no target-branch-context events), no tag trigger and no manual

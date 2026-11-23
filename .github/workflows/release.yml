@@ -1,8 +1,9 @@
 name: Release
 
 # Demo release path. Manual only: tag pushes no longer publish a Release.
-# Build demos locally with tools/build-demo.sh; this workflow is kept for
-# explicit workflow_dispatch publishes when a GitHub Release is wanted.
+# Build demos locally with ../tools/build-demo.sh in the parent project; this
+# workflow is kept for explicit workflow_dispatch publishes when a GitHub
+# Release is wanted.
 on:
   workflow_dispatch:
     inputs:
