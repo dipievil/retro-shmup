@@ -4,11 +4,11 @@ name: Semantic Release
 # Commit PR titles (squash-merge subjects) since the last vMAJOR.MINOR.PATCH tag
 # and publishes a GitHub Release with GitHub-generated notes.
 #
-# Tag format is strict semver: vMAJOR.MINOR.PATCH (no suffix). The separate demo
-# workflow (.github/workflows/release.yml) owns every tag with a `-demo` suffix
-# (e.g. v0.0.1-demo, v0.0.2-demo); a strict semver tag can never have that
-# suffix, so the two release paths cannot collide. The baseline lookup below
-# also filters tags with an anchored regex, so demo tags can never become a
+# Tag format is strict semver: vMAJOR.MINOR.PATCH (no suffix). Demo tags
+# (vX.Y.Z-demo) are version markers for tools/build-demo.sh only; they never
+# publish a GitHub Release from a tag push. A strict semver tag can never have
+# that suffix, so the two paths cannot collide. The baseline lookup below also
+# filters tags with an anchored regex, so demo tags can never become a
 # version baseline.
 #
 # Only `push` to `main` triggers this workflow: no pull-request events (in

@@ -1,13 +1,9 @@
 name: Release
 
-# Demo release path. Push any tag with a `-demo` suffix (e.g. v0.0.1-demo,
-# v0.0.2-demo) after merging to dev and this publishes the Linux demo. The
-# build steps replace the former ci.yml build job; lint/tests stay in ci.yml
-# (run_all.sh is the release gate).
+# Demo release path. Manual only: tag pushes no longer publish a Release.
+# Build demos locally with tools/build-demo.sh; this workflow is kept for
+# explicit workflow_dispatch publishes when a GitHub Release is wanted.
 on:
-  push:
-    tags:
-      - 'v*-demo'
   workflow_dispatch:
     inputs:
       version:
