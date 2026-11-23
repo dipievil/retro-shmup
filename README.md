@@ -146,32 +146,3 @@ godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
 `tools/run_all.sh` fails on GDScript parse errors, on any `tools/validate_*.py` or
 `tests/validate_*.py` failure, on audio asset validation failures and on any
 `tests/*_test.gd` suite that exits non-zero.
-
-CI (`.github/workflows/ci.yml`) runs the script on Godot 4.3 and 4.7.2 and exports
-Linux, Windows and macOS builds with `export_presets.cfg`. **CI artifact** names
-are `retro-shmup-<version>-<short-sha>-<target>`, where `<version>` is the `v` tag
-without its `v` on tag pushes and `dev` on branch pushes (including pushes to
-`main`); retention is 14 days. Windows/macOS executables cannot run on the Linux
-runner, so those jobs smoke-test the exported `.pck` with the Linux engine rather
-than claiming a native smoke.
-
-The semantic-release workflow (`.github/workflows/semantic-release.yml`) downloads
-those CI artifacts by the `retro-shmup-*` pattern and renames the dev-named ones
-before packaging. **Release assets** are therefore named
-`retro-shmup-<X.Y.Z>-<short-sha>-<target>` — the computed semantic version with no
-`dev` token — in `.zip` for Windows and `.tar.gz` otherwise, with `SHA256SUMS`
-matching the published archives.
-
-## Demo builds
-
-The Phase 1 demo is released as **0.0.1-demo** when the `v0.0.1-demo` tag is
-pushed; the `Release` workflow (`.github/workflows/release.yml`) gates on
-`tools/run_all.sh`, exports the Linux x86_64 build and publishes it to the
-[GitHub Releases page](https://github.com/dipievil/retro-shmup/releases/tag/v0.0.1-demo).
-
-Download `retro-shmup.x86_64` and `retro-shmup.pck` from that release, keep them
-in the same directory and run the binary. `SHA256SUMS` is attached alongside
-them — verify with `sha256sum -c SHA256SUMS` before running. The Phase 1 demo
-covers GDAS-1 movement/zoom and the laser, missile and bomb weapons. The release
-path packages the tagged source as-is: it adds no gameplay, HUD or audio assets.
-
