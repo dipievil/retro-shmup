@@ -15,9 +15,8 @@ signal hit(target: Node2D)
 @export var lifetime: float = 3.0
 @export var is_player_projectile: bool = true
 
-# "laser" | "missile" | "bomb" — selects optional sprite path set (task-2).
+# "laser" | "missile" | "bomb" — selects the authored Aseprite sheet.
 @export var weapon_kind: String = "laser"
-@export var texture_paths: Array = []
 
 # Depth layer the shot was launched from (0 = back, 0.5 = middle, 1 = front).
 # Mirrors PlayerShip/BaseEnemy; homing projectiles use it to stay on their plane.
@@ -72,19 +71,14 @@ func _is_off_screen() -> bool:
 		or p.y < -_OFFSCREEN_MARGIN or p.y > viewport_size.y + _OFFSCREEN_MARGIN)
 
 
-## Uses the imported projectile sprite when available (task-2), otherwise the
-## scene's FallbackVisual polygon stays visible. Missing assets never error.
+## Uses the authored Aseprite sheet frame for this weapon kind. A missing sheet
+## leaves the Visual node empty instead of erroring or drawing a placeholder.
 func _apply_visual() -> void:
-	if texture_paths.is_empty():
-		texture_paths = WeaponResources.SPRITE_PATHS.get(weapon_kind, []) as Array
-	var texture := WeaponResources.first_existing(texture_paths) as Texture2D
 	var sprite := get_node_or_null("Visual") as Sprite2D
-	var fallback := get_node_or_null("FallbackVisual") as Node2D
-	if texture != null and sprite != null:
-		sprite.texture = texture
-		sprite.visible = true
-		if fallback != null:
-			fallback.visible = false
-	elif sprite != null:
-		# TODO(task-2): import laser/missile/bomb projectile sprites.
-		sprite.visible = false
+	if sprite == null:
+		return
+	var texture := WeaponResources.sprite_texture(weapon_kind)
+	if texture == null:
+		return
+	sprite.texture = texture
+	sprite.visible = true

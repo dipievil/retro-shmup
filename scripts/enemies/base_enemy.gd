@@ -62,6 +62,7 @@ func _die() -> void:
 	_is_alive = false
 	died.emit(score_value)
 	GameManager.add_score(score_value)
+	Explosion.spawn(get_parent(), global_position)
 	queue_free()
 
 

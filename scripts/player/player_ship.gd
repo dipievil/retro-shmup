@@ -11,15 +11,15 @@ extends Area2D
 ## to evade enemy fire. Enemy ships enter from any layer but converge on the
 ## player's current layer.
 ##
-## TODO(task-2): replace the Polygon2D placeholder in player_ship.tscn with
-## the GDAS-1 sprite (assets/sprites/player/gdas1.png + json-array metadata)
-## once that asset is available. The controller does not depend on the
-## specific visual node, so no logic changes should be needed.
+## The Visual node is an AnimatedSprite2D fed by the authored GDAS-1 sheet;
+## Aseprite tags (thrust/fire) become animations when present in the export.
 
 const LaserProjectileScene := preload("res://scenes/weapons/laser_projectile.tscn")
 const MissileProjectileScene := preload("res://scenes/weapons/missile_projectile.tscn")
 const BombProjectileScene := preload("res://scenes/weapons/bomb_projectile.tscn")
 const _WEAPON_ORDER := ["laser", "missile", "bomb"]
+const _SHIP_SHEET := "res://assets/sprites/player/gdas1_sheet.png"
+const _SHIP_METADATA := "res://assets/sprites/player/gdas1_sheet.json"
 
 # ---- Signals ----
 signal hull_changed(new_hull: int)
@@ -82,11 +82,13 @@ var _shield_regen_timer: float = 0.0
 var _invincible_timer: float = 0.0
 var _is_invincible: bool = false
 var _ship_id: String = "gdas_1"
+var _visual: AnimatedSprite2D = null
 
 
 func _ready() -> void:
 	_load_ship_data()
 	_setup_weapons()
+	_setup_visual()
 	collision_layer = 1  # player (bit 0)
 	collision_mask = 4 | 8 | 16  # enemies + enemy_projectiles + pickups (bits 2, 3, 4)
 	area_entered.connect(_on_area_entered)
@@ -120,6 +122,28 @@ func _setup_weapons() -> void:
 	# Ships without the laser (future loadouts) still get a valid active weapon.
 	if not _weapons.has(_active_weapon) and not _weapons.is_empty():
 		_active_weapon = _weapons.keys()[0]
+
+
+## Replaces the old Polygon2D placeholder with the authored GDAS-1 sheet.
+## Tags named "fire"/"thrust" are used when the Aseprite export includes them;
+## "default" is always available as the sheet's full frame range.
+func _setup_visual() -> void:
+	_visual = get_node_or_null("Visual") as AnimatedSprite2D
+	if _visual == null:
+		return
+	var frames := SpriteSheet.load_frames(_SHIP_SHEET, _SHIP_METADATA)
+	if not SpriteSheet.has_frames(frames):
+		return
+	_visual.sprite_frames = frames
+	_visual.animation = SpriteSheet.DEFAULT_ANIMATION
+	if not _visual.animation_finished.is_connected(_on_visual_animation_finished):
+		_visual.animation_finished.connect(_on_visual_animation_finished)
+	_visual.play()
+
+
+func _on_visual_animation_finished() -> void:
+	if _visual != null and _visual.sprite_frames != null:
+		_visual.play(SpriteSheet.DEFAULT_ANIMATION)
 
 
 ## Cadence values follow game_design.md: rapid laser, slow homing missile,
@@ -211,7 +235,7 @@ func _cycle_speed() -> void:
 
 # ---- Depth / Action-layer system ----
 func _handle_depth(delta: float) -> void:
-	# zoom_in = R1 (gamepad) / E (keyboard), zoom_out = L1 / Q.
+	# zoom_in = R1 / Left Shift, zoom_out = L1 / Left Ctrl.
 	if Input.is_action_just_pressed("zoom_in"):
 		change_depth(depth_step)
 	if Input.is_action_just_pressed("zoom_out"):
@@ -291,7 +315,10 @@ func _handle_firing() -> void:
 	# Held fire uses the active weapon; each Weapon enforces its own cadence.
 	if Input.is_action_pressed("fire"):
 		_fire_weapon(_active_weapon)
-	# Direct-fire shortcuts from the existing skeleton also select that weapon.
+	# Q/W/E fire and select a weapon directly (gamepad R2/L2/A).
+	if Input.is_action_just_pressed("fire_laser") and _weapons.has("laser"):
+		switch_weapon("laser")
+		_fire_weapon("laser")
 	if Input.is_action_just_pressed("fire_missile") and _weapons.has("missile"):
 		switch_weapon("missile")
 		_fire_weapon("missile")
@@ -306,6 +333,10 @@ func _fire_weapon(wname: String) -> void:
 	var weapon: Weapon = _weapons[wname]
 	var muzzle := Vector2(position.x, position.y - 20)
 	weapon.fire(Vector2.UP, muzzle)
+	var has_fire_frame := (_visual != null and _visual.sprite_frames != null
+		and _visual.sprite_frames.has_animation("fire"))
+	if has_fire_frame and _visual.animation != "fire":
+		_visual.play("fire")
 
 
 func switch_weapon(wname: String) -> void:
@@ -413,6 +444,7 @@ func _start_invincibility() -> void:
 
 func _die() -> void:
 	destroyed.emit()
+	Explosion.spawn(get_parent(), global_position)
 	GameManager.game_over()
 	queue_free()
 
@@ -436,6 +468,9 @@ func _input(event: InputEvent) -> void:
 			GameManager.change_state(GameManager.GameState.PLAYING)
 	if GameManager.current_state != GameManager.GameState.PLAYING:
 		return
+	# GDAS-1 has three speed levels (docs/game_design.md), cycled with C/Y.
+	if event.is_action_pressed("cycle_speed"):
+		_cycle_speed()
 	# Weapon switching: cycle with R/T, direct select with 1/2/3.
 	if event.is_action_pressed("next_weapon"):
 		cycle_weapon(1)

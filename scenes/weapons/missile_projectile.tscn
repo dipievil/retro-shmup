@@ -12,11 +12,8 @@ script = ExtResource("1_missile")
 weapon_kind = "missile"
 
 [node name="Visual" type="Sprite2D" parent="."]
-visible = false
-
-[node name="FallbackVisual" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(0, -8, 3, 2, 3, 7, -3, 7, -3, 2)
-color = Color(1, 0.55, 0.15, 1)
+; Sheet art points right; shots travel up.
+rotation = -1.5707963
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_missile")
