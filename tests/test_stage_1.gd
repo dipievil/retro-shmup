@@ -92,7 +92,12 @@ func _check_parallax() -> bool:
 	var far_delta := far.motion_offset.y - far_before
 	var near_delta := near.motion_offset.y - near_before
 	_check(near_delta > 0.0, "near layer scrolls during play")
-	_check(near_delta > far_delta, "near layer scrolls faster than far layer")
+	# StageBase advances motion_offset uniformly; ParallaxLayer.motion_scale
+	# supplies the depth, so compare the effective (scaled) scroll rates.
+	var far_effective := far_delta * far.motion_scale.y
+	var near_effective := near_delta * near.motion_scale.y
+	_check(far_effective > 0.0 and near_effective > far_effective,
+		"near layer scrolls faster than far layer after motion_scale")
 	return true
 
 

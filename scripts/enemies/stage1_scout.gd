@@ -32,5 +32,5 @@ func _tick_animation() -> void:
 		return
 	var frame := int(_anim_time / FRAME_DURATION) % FRAME_COUNT
 	var rect := sprite.region_rect
-	rect.x = float(frame * FRAME_WIDTH)
+	rect.position.x = float(frame * FRAME_WIDTH)
 	sprite.region_rect = rect
