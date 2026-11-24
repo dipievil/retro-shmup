@@ -455,11 +455,12 @@ func _die() -> void:
 func _on_area_entered(other: Area2D) -> void:
 	if other.is_in_group("enemy_projectile"):
 		var proj: Projectile = other
-		var from_front := proj.direction.y > 0  # coming from above = front hit
+		# The ship faces right: a shot travelling left comes from the front.
+		var from_front := proj.direction.x < 0.0
 		take_damage(proj.damage, from_front)
 		proj.queue_free()
 	elif other.is_in_group("enemy"):
-		take_damage(1, other.global_position.y < global_position.y)
+		take_damage(1, other.global_position.x > global_position.x)
 
 
 func _input(event: InputEvent) -> void:
