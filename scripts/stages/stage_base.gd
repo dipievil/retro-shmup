@@ -51,7 +51,9 @@ func _update_parallax(delta: float) -> void:
 		return
 	for layer in _parallax.get_children():
 		if layer is ParallaxLayer:
-			layer.motion_offset.y += scroll_speed * delta
+			# Negative x motion moves the scenery right-to-left, matching the
+			# side-scrolling perspective used by enemy movement.
+			layer.motion_offset.x -= scroll_speed * delta
 
 
 # ---- Spawning ----
