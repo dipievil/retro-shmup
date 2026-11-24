@@ -54,8 +54,14 @@ static func load_texture(
 
 
 ## Returns SpriteFrames with a "default" animation plus one animation per
-## Aseprite tag (if the JSON export carries frameTags).
-static func load_frames(sheet_path: String, json_path: String) -> SpriteFrames:
+## Aseprite tag (if the JSON export carries frameTags). Pass `loop = false` for
+## one-shot effects: Godot only emits `animation_finished` for non-looping
+## animations, so looping ones never run their cleanup callbacks.
+static func load_frames(
+	sheet_path: String,
+	json_path: String,
+	loop: bool = true,
+) -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	var sheet := _load_texture(sheet_path)
 	var data := metadata(json_path)
@@ -64,7 +70,7 @@ static func load_frames(sheet_path: String, json_path: String) -> SpriteFrames:
 		return frames
 
 	var fps := _frames_per_second(entries)
-	_fill_animation(frames, DEFAULT_ANIMATION, sheet, entries, 0, entries.size(), fps)
+	_fill_animation(frames, DEFAULT_ANIMATION, sheet, entries, 0, entries.size(), fps, loop)
 
 	var meta: Dictionary = data.get("meta", {})
 	var tags: Array = meta.get("frameTags", []) as Array
@@ -78,7 +84,7 @@ static func load_frames(sheet_path: String, json_path: String) -> SpriteFrames:
 		var to := mini(int(tag.get("to", entries.size() - 1)), entries.size() - 1)
 		if to < from:
 			continue
-		_fill_animation(frames, name, sheet, entries, from, to + 1, fps)
+		_fill_animation(frames, name, sheet, entries, from, to + 1, fps, loop)
 	return frames
 
 
@@ -111,6 +117,7 @@ static func _fill_animation(
 	from: int,
 	to: int,
 	fps: float,
+	loop: bool,
 ) -> void:
 	if not frames.has_animation(animation):
 		frames.add_animation(animation)
@@ -119,4 +126,4 @@ static func _fill_animation(
 		if entry is Dictionary:
 			frames.add_frame(animation, frame_texture(sheet, entry))
 	frames.set_animation_speed(animation, fps)
-	frames.set_animation_loop(animation, true)
+	frames.set_animation_loop(animation, loop)

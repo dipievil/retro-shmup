@@ -29,7 +29,7 @@ static func spawn(parent: Node, at: Vector2) -> Explosion:
 
 func _ready() -> void:
 	if _shared_frames == null:
-		_shared_frames = SpriteSheet.load_frames(SHEET_PATH, METADATA_PATH)
+		_shared_frames = SpriteSheet.load_frames(SHEET_PATH, METADATA_PATH, false)
 	if not SpriteSheet.has_frames(_shared_frames):
 		queue_free()
 		return

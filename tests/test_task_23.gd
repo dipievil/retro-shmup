@@ -57,6 +57,7 @@ func _test_sheets() -> void:
 	var frames := SpriteSheet.load_frames(SHIP_SHEET, SHIP_META)
 	_check(SpriteSheet.has_frames(frames), "GDAS-1 default animation exists")
 	_check(frames.get_frame_count(&"default") == 8, "GDAS-1 sheet has 8 frames")
+	_check(frames.get_animation_loop(&"default"), "GDAS-1 sheet still loops by default")
 	var atlas := SpriteSheet.load_texture(LASER_SHEET, LASER_META)
 	_check(atlas != null, "laser frame is an AtlasTexture")
 	_check(atlas != null and atlas.region.size == Vector2(16, 8), "laser frame uses 16x8 region")
@@ -103,7 +104,11 @@ func _test_explosion() -> void:
 	add_child(effect)
 	_check(effect != null and SpriteSheet.has_frames(effect.sprite_frames),
 		"explosion plays authored frames")
-	effect.queue_free()
+	_check(effect.sprite_frames != null
+		and not effect.sprite_frames.get_animation_loop(SpriteSheet.DEFAULT_ANIMATION),
+		"explosion animation is non-looping")
+	effect.animation_finished.emit()
+	_check(effect.is_queued_for_deletion(), "explosion frees itself when the animation ends")
 
 
 func _has_key(action: String, code: int) -> bool:
