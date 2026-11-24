@@ -1,37 +1,27 @@
 class_name WeaponResources
 extends RefCounted
 
-## Shared lookup of optional weapon assets.
+## Shared lookup of weapon assets.
 ##
-## Sprites (task-2) and SFX (task-3) are authored in sibling tasks and may not be
-## present yet. Keeping the expected paths here lets weapons reference them now
-## without hard failures: first_existing() returns null when nothing is imported.
-## See docs/game_design.md ("Weapon types") and docs/plan.md ("Assets").
+## Projectile sprites are authored as Aseprite sheets (task-2) and resolved to
+## AtlasTextures by SpriteSheet. SFX are optional because task-3 authored them
+## in parallel; a missing file simply means silence.
 ##
 ## validate_project.py: OPTIONAL-ASSET-REGISTRY
-## Every res:// path below is a best-effort lookup. Missing files are expected and
-## fall back to the built-in polygon visuals / silence, so the validator exempts
-## this file from its resource-existence check.
+## Every res:// path below is a best-effort lookup. Missing files fall back to
+## the built-in visuals / silence, so the validator exempts this file from its
+## resource-existence check.
 
-const SPRITE_PATHS := {
-	"laser": [
-		"res://assets/sprites/player/laser.png",
-		"res://assets/sprites/player/laser_projectile.png",
-		"res://assets/sprites/player/ship_laser.png",
-		"res://assets/sprites/effects/laser.png",
-	],
-	"missile": [
-		"res://assets/sprites/player/missile.png",
-		"res://assets/sprites/player/missile_projectile.png",
-		"res://assets/sprites/player/ship_missile.png",
-		"res://assets/sprites/effects/missile.png",
-	],
-	"bomb": [
-		"res://assets/sprites/player/bomb.png",
-		"res://assets/sprites/player/bomb_projectile.png",
-		"res://assets/sprites/player/ship_bomb.png",
-		"res://assets/sprites/effects/bomb.png",
-	],
+const SPRITE_SHEETS := {
+	"laser": "res://assets/sprites/player/laser_sheet.png",
+	"missile": "res://assets/sprites/player/missile_sheet.png",
+	"bomb": "res://assets/sprites/player/bomb_sheet.png",
+}
+
+const SPRITE_METADATA := {
+	"laser": "res://assets/sprites/player/laser_sheet.json",
+	"missile": "res://assets/sprites/player/missile_sheet.json",
+	"bomb": "res://assets/sprites/player/bomb_sheet.json",
 }
 
 const SFX_PATHS := {
@@ -56,7 +46,16 @@ const SFX_PATHS := {
 }
 
 
-## Returns the first path that is actually imported, or null when none exists.
+## Returns the first frame of the weapon's authored sheet, or null if absent.
+static func sprite_texture(weapon_kind: String, frame_index: int = 0) -> AtlasTexture:
+	return SpriteSheet.load_texture(
+		SPRITE_SHEETS.get(weapon_kind, ""),
+		SPRITE_METADATA.get(weapon_kind, ""),
+		frame_index,
+	)
+
+
+## Returns the first existing SFX path resource, or null when none exists.
 static func first_existing(paths: Array) -> Resource:
 	for path in paths:
 		if path is String and not path.is_empty() and ResourceLoader.exists(path):

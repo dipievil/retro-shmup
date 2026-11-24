@@ -29,6 +29,7 @@ func _detonate() -> void:
 		return
 	_detonated = true
 	_damage_enemies_in_radius()
+	Explosion.spawn(get_parent(), global_position)
 	hit.emit(null)
 	if is_instance_valid(self):
 		queue_free()

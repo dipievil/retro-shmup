@@ -74,9 +74,9 @@ BEHAVIOUR_CHECKS = [
 
 INPUT_ACTIONS_USED = [
     "move_left", "move_right", "move_up", "move_down",
-    "zoom_in", "zoom_out", "fire", "fire_missile", "fire_bomb",
+    "zoom_in", "zoom_out", "fire", "fire_laser", "fire_missile", "fire_bomb",
     "next_weapon", "prev_weapon", "select_laser", "select_missile",
-    "select_bomb", "pause", "start",
+    "select_bomb", "cycle_speed", "pause", "start",
 ]
 
 
@@ -155,6 +155,8 @@ def check_scene(rel: str, script_hint: str, kind: str) -> None:
         ERRORS.append(f"{rel}: missing hitbox CollisionShape2D")
     if 'name="Visual" type="Sprite2D"' not in text:
         ERRORS.append(f"{rel}: missing optional sprite node")
+    if "FallbackVisual" in text:
+        ERRORS.append(f"{rel}: placeholder FallbackVisual must be retired")
     if f'weapon_kind = "{kind}"' not in text:
         ERRORS.append(f"{rel}: missing weapon_kind = {kind}")
     scripts = re.findall(r'path="(res://[^"]+\.gd)"', text)

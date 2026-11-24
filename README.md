@@ -15,18 +15,9 @@ A retro-style shoot-em-up game built with Godot Engine 4.3+.
 
 ## Controls
 
-| Action | Key |
-|--------|-----|
-| Move | WASD / Arrow Keys |
-| Move (gamepad) | D-pad / left stick |
-| Zoom In (closer layer) | E |
-| Zoom Out (farther layer) | Q |
-| Zoom In (gamepad) | R1 |
-| Zoom Out (gamepad) | L1 |
-| Fire Laser | J / Space |
-| Fire Missile | K |
-| Fire Bomb | L |
-| Pause | Escape |
+The control table is owned by the parent repository:
+[`docs/game_design.md#controls`](../../docs/game_design.md#controls).
+`project.godot`'s Input Map is its implementation; keep the two in sync.
 
 ## Foundation configuration (Phase 1)
 
@@ -39,10 +30,10 @@ A retro-style shoot-em-up game built with Godot Engine 4.3+.
 | Pixel snap | `rendering/2d/snap/snap_2d_transforms_to_pixel` | enabled; vertex snapping is deliberately left off per Godot's recommendation |
 | Audio | `audio/buses/default_bus_layout` | empty — the stem buses (`Music`, `BaseBeat`, `Drums`, `Instruments`, `Vocals`, `SFX`) are created at runtime by `AudioManager` through `AudioServer`, keeping the dynamic mix in one place |
 
-Input Map already defines movement (`move_up/down/left/right`), zoom (`zoom_in`/`zoom_out`),
-fire (`fire`, `fire_missile`, `fire_bomb`), `start` and `pause`, with both WASD and arrow keys.
-Gamepad R1/L1 (shoulder buttons) bindings for zoom are intentionally left to the
-player-movement task so the control work stays in one place.
+Input Map defines movement (`move_up/down/left/right`), zoom (`zoom_in`/`zoom_out`),
+fire (`fire`, `fire_laser`, `fire_missile`, `fire_bomb`), weapon selection/cycling,
+`cycle_speed`, `start` and `pause`. Keyboard and gamepad events follow the design
+table linked above.
 
 The `ui/` folder from the plan is represented by `scenes/ui/` (HUD scene) and
 `scripts/ui/` (HUD script), following Godot's parallel scenes/scripts convention.
