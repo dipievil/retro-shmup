@@ -13,11 +13,6 @@ weapon_kind = "bomb"
 explosion_radius = 48.0
 
 [node name="Visual" type="Sprite2D" parent="."]
-visible = false
-
-[node name="FallbackVisual" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(-5, -5, 5, -5, 5, 5, -5, 5)
-color = Color(1, 0.25, 0.2, 1)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_bomb")

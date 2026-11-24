@@ -69,6 +69,18 @@ func change_state(new_state: GameState) -> void:
 			get_tree().paused = false
 
 
+func _input(event: InputEvent) -> void:
+	# Escape pauses and unpauses. Input callbacks on pausable nodes stop when
+	# SceneTree.paused is true, so this lives in the ALWAYS autoload.
+	if not event.is_action_pressed("pause") or event.is_echo():
+		return
+	match current_state:
+		GameState.PLAYING:
+			change_state(GameState.PAUSED)
+		GameState.PAUSED:
+			change_state(GameState.PLAYING)
+
+
 func add_score(amount: int) -> void:
 	score += amount
 	score_changed.emit(score)

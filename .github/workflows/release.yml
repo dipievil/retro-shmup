@@ -1,19 +1,17 @@
 name: Release
 
-# Phase 1 demo release path. Push the v0.0.1-demo tag after merging to dev and
-# this publishes the Linux demo. The build steps mirror ci.yml's headless build
-# job; the lint/test matrix stays in ci.yml (run_all.sh is the release gate).
+# Demo release path. Manual only: tag pushes no longer publish a Release.
+# Build demos locally with ../tools/build-demo.sh in the parent project; this
+# workflow is kept for explicit workflow_dispatch publishes when a GitHub
+# Release is wanted.
 on:
-  push:
-    tags:
-      - 'v0.0.1-demo'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release tag to publish (e.g. v0.0.1-demo)'
+        description: 'Release tag to publish (e.g. v0.0.2-demo)'
         required: true
         type: string
-        default: 'v0.0.1-demo'
+        default: 'v0.0.2-demo'
 
 permissions:
   contents: read

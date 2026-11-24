@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/weapons/projectile.gd" id="1_proj"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_laser"]
-size = Vector2(4, 12)
+size = Vector2(12, 4)
 
 [node name="LaserProjectile" type="Area2D"]
 collision_layer = 2
@@ -12,11 +12,7 @@ script = ExtResource("1_proj")
 weapon_kind = "laser"
 
 [node name="Visual" type="Sprite2D" parent="."]
-visible = false
-
-[node name="FallbackVisual" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(-2, -6, 2, -6, 2, 6, -2, 6)
-color = Color(1, 1, 0.2, 1)
+; Sheet art points right and shots travel right; no visual rotation needed.
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_laser")

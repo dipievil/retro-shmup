@@ -11,15 +11,14 @@ extends Area2D
 ## to evade enemy fire. Enemy ships enter from any layer but converge on the
 ## player's current layer.
 ##
-## TODO(task-2): replace the Polygon2D placeholder in player_ship.tscn with
-## the GDAS-1 sprite (assets/sprites/player/gdas1.png + json-array metadata)
-## once that asset is available. The controller does not depend on the
-## specific visual node, so no logic changes should be needed.
+## The Visual node is an AnimatedSprite2D fed by the authored GDAS-1 sheet;
+## Aseprite tags (thrust/fire) become animations when present in the export.
 
 const LaserProjectileScene := preload("res://scenes/weapons/laser_projectile.tscn")
 const MissileProjectileScene := preload("res://scenes/weapons/missile_projectile.tscn")
 const BombProjectileScene := preload("res://scenes/weapons/bomb_projectile.tscn")
-const _WEAPON_ORDER := ["laser", "missile", "bomb"]
+const _SHIP_SHEET := "res://assets/sprites/player/gdas1_sheet.png"
+const _SHIP_METADATA := "res://assets/sprites/player/gdas1_sheet.json"
 
 # ---- Signals ----
 signal hull_changed(new_hull: int)
@@ -74,6 +73,8 @@ var max_speed_level: int = 3
 
 # ---- Internal: Weapons ----
 var _weapons: Dictionary = {}  # weapon_name -> Weapon node
+# Weapon 1 is the held-fire weapon (laser for GDAS-1). Q/W/E fire directly and
+# never change this slot: the design has no in-game weapon cycling.
 var _active_weapon: String = "laser"
 
 # ---- Internal: State ----
@@ -82,11 +83,13 @@ var _shield_regen_timer: float = 0.0
 var _invincible_timer: float = 0.0
 var _is_invincible: bool = false
 var _ship_id: String = "gdas_1"
+var _visual: AnimatedSprite2D = null
 
 
 func _ready() -> void:
 	_load_ship_data()
 	_setup_weapons()
+	_setup_visual()
 	collision_layer = 1  # player (bit 0)
 	collision_mask = 4 | 8 | 16  # enemies + enemy_projectiles + pickups (bits 2, 3, 4)
 	area_entered.connect(_on_area_entered)
@@ -117,9 +120,31 @@ func _setup_weapons() -> void:
 		if weapon_node:
 			add_child(weapon_node)
 			_weapons[wname] = weapon_node
-	# Ships without the laser (future loadouts) still get a valid active weapon.
+	# Ships without the laser (future loadouts) still get a valid Weapon 1.
 	if not _weapons.has(_active_weapon) and not _weapons.is_empty():
 		_active_weapon = _weapons.keys()[0]
+
+
+## Replaces the old Polygon2D placeholder with the authored GDAS-1 sheet.
+## Tags named "fire"/"thrust" are used when the Aseprite export includes them;
+## "default" is always available as the sheet's full frame range.
+func _setup_visual() -> void:
+	_visual = get_node_or_null("Visual") as AnimatedSprite2D
+	if _visual == null:
+		return
+	var frames := SpriteSheet.load_frames(_SHIP_SHEET, _SHIP_METADATA)
+	if not SpriteSheet.has_frames(frames):
+		return
+	_visual.sprite_frames = frames
+	_visual.animation = SpriteSheet.DEFAULT_ANIMATION
+	if not _visual.animation_finished.is_connected(_on_visual_animation_finished):
+		_visual.animation_finished.connect(_on_visual_animation_finished)
+	_visual.play()
+
+
+func _on_visual_animation_finished() -> void:
+	if _visual != null and _visual.sprite_frames != null:
+		_visual.play(SpriteSheet.DEFAULT_ANIMATION)
 
 
 ## Cadence values follow game_design.md: rapid laser, slow homing missile,
@@ -211,7 +236,7 @@ func _cycle_speed() -> void:
 
 # ---- Depth / Action-layer system ----
 func _handle_depth(delta: float) -> void:
-	# zoom_in = R1 (gamepad) / E (keyboard), zoom_out = L1 / Q.
+	# zoom_in = R1 / Left Shift, zoom_out = L1 / Left Ctrl.
 	if Input.is_action_just_pressed("zoom_in"):
 		change_depth(depth_step)
 	if Input.is_action_just_pressed("zoom_out"):
@@ -288,50 +313,27 @@ func _apply_depth_visuals() -> void:
 
 # ---- Firing ----
 func _handle_firing() -> void:
-	# Held fire uses the active weapon; each Weapon enforces its own cadence.
+	# Space (gamepad X) is held fire for Weapon 1 only; each Weapon enforces its
+	# own cadence. Direct Q/W/E (R2/L2/A) fire is handled in _input().
 	if Input.is_action_pressed("fire"):
 		_fire_weapon(_active_weapon)
-	# Direct-fire shortcuts from the existing skeleton also select that weapon.
-	if Input.is_action_just_pressed("fire_missile") and _weapons.has("missile"):
-		switch_weapon("missile")
-		_fire_weapon("missile")
-	if Input.is_action_just_pressed("fire_bomb") and _weapons.has("bomb"):
-		switch_weapon("bomb")
-		_fire_weapon("bomb")
 
 
 func _fire_weapon(wname: String) -> void:
 	if not _weapons.has(wname):
 		return
 	var weapon: Weapon = _weapons[wname]
-	var muzzle := Vector2(position.x, position.y - 20)
-	weapon.fire(Vector2.UP, muzzle)
+	# Side-scroller baseline (game_design.md#perspective): the ship's nose and
+	# every shot point right.
+	var muzzle := Vector2(position.x + 20, position.y)
+	weapon.fire(Vector2.RIGHT, muzzle)
+	var has_fire_frame := (_visual != null and _visual.sprite_frames != null
+		and _visual.sprite_frames.has_animation("fire"))
+	if has_fire_frame and _visual.animation != "fire":
+		_visual.play("fire")
 
 
-func switch_weapon(wname: String) -> void:
-	if not _weapons.has(wname) or _active_weapon == wname:
-		return
-	_active_weapon = wname
-	var weapon: Weapon = _weapons[wname]
-	GameManager.weapon_changed.emit(wname, weapon.current_level)
-
-
-## Cycles through only the weapons this ship actually carries.
-func cycle_weapon(step: int) -> void:
-	var available: Array[String] = []
-	for wname in _WEAPON_ORDER:
-		if _weapons.has(wname):
-			available.append(wname)
-	if available.is_empty():
-		return
-	var index := available.find(_active_weapon)
-	if index < 0:
-		index = 0
-	else:
-		index = wrapi(index + step, 0, available.size())
-	switch_weapon(available[index])
-
-
+## Weapon 1 (the held-fire slot). It is never changed by the fire buttons.
 func get_active_weapon() -> String:
 	return _active_weapon
 
@@ -413,6 +415,7 @@ func _start_invincibility() -> void:
 
 func _die() -> void:
 	destroyed.emit()
+	Explosion.spawn(get_parent(), global_position)
 	GameManager.game_over()
 	queue_free()
 
@@ -421,29 +424,33 @@ func _die() -> void:
 func _on_area_entered(other: Area2D) -> void:
 	if other.is_in_group("enemy_projectile"):
 		var proj: Projectile = other
-		var from_front := proj.direction.y > 0  # coming from above = front hit
+		# The ship faces right: a shot travelling left comes from the front.
+		var from_front := proj.direction.x < 0.0
 		take_damage(proj.damage, from_front)
 		proj.queue_free()
 	elif other.is_in_group("enemy"):
-		take_damage(1, other.global_position.y < global_position.y)
+		take_damage(1, other.global_position.x > global_position.x)
 
 
 func _input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause"):
-		if GameManager.current_state == GameManager.GameState.PLAYING:
-			GameManager.change_state(GameManager.GameState.PAUSED)
-		elif GameManager.current_state == GameManager.GameState.PAUSED:
-			GameManager.change_state(GameManager.GameState.PLAYING)
+	# Pause is handled by GameManager (PROCESS_MODE_ALWAYS): this ship's input
+	# callbacks stop firing while the tree is paused, so Escape cannot unpause
+	# from here.
 	if GameManager.current_state != GameManager.GameState.PLAYING:
 		return
-	# Weapon switching: cycle with R/T, direct select with 1/2/3.
-	if event.is_action_pressed("next_weapon"):
-		cycle_weapon(1)
-	elif event.is_action_pressed("prev_weapon"):
-		cycle_weapon(-1)
-	elif event.is_action_pressed("select_laser"):
-		switch_weapon("laser")
-	elif event.is_action_pressed("select_missile"):
-		switch_weapon("missile")
-	elif event.is_action_pressed("select_bomb"):
-		switch_weapon("bomb")
+	# Q/W/E (R2/L2/A) fire their weapon directly. No selection or cycling: the
+	# held-fire Weapon 1 slot stays on the laser for the whole demo. is_echo()
+	# keeps OS key repeat from turning a single press into auto-fire.
+	if _is_new_press(event, "fire_laser"):
+		_fire_weapon("laser")
+	elif _is_new_press(event, "fire_missile"):
+		_fire_weapon("missile")
+	elif _is_new_press(event, "fire_bomb"):
+		_fire_weapon("bomb")
+	# GDAS-1 has three speed levels (docs/game_design.md), cycled with C/Y.
+	if _is_new_press(event, "cycle_speed"):
+		_cycle_speed()
+
+
+func _is_new_press(event: InputEvent, action: String) -> bool:
+	return event.is_action_pressed(action) and not event.is_echo()

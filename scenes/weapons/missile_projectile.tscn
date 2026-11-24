@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/weapons/missile_projectile.gd" id="1_missile"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_missile"]
-size = Vector2(6, 14)
+size = Vector2(14, 6)
 
 [node name="MissileProjectile" type="Area2D"]
 collision_layer = 2
@@ -12,11 +12,7 @@ script = ExtResource("1_missile")
 weapon_kind = "missile"
 
 [node name="Visual" type="Sprite2D" parent="."]
-visible = false
-
-[node name="FallbackVisual" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(0, -8, 3, 2, 3, 7, -3, 7, -3, 2)
-color = Color(1, 0.55, 0.15, 1)
+; Sheet art points right; the missile node rotates to face its travel direction.
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_missile")

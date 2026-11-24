@@ -15,18 +15,9 @@ A retro-style shoot-em-up game built with Godot Engine 4.3+.
 
 ## Controls
 
-| Action | Key |
-|--------|-----|
-| Move | WASD / Arrow Keys |
-| Move (gamepad) | D-pad / left stick |
-| Zoom In (closer layer) | E |
-| Zoom Out (farther layer) | Q |
-| Zoom In (gamepad) | R1 |
-| Zoom Out (gamepad) | L1 |
-| Fire Laser | J / Space |
-| Fire Missile | K |
-| Fire Bomb | L |
-| Pause | Escape |
+The control table is owned by the parent repository:
+[`docs/game_design.md#controls`](../../docs/game_design.md#controls).
+`project.godot`'s Input Map is its implementation; keep the two in sync.
 
 ## Foundation configuration (Phase 1)
 
@@ -39,10 +30,11 @@ A retro-style shoot-em-up game built with Godot Engine 4.3+.
 | Pixel snap | `rendering/2d/snap/snap_2d_transforms_to_pixel` | enabled; vertex snapping is deliberately left off per Godot's recommendation |
 | Audio | `audio/buses/default_bus_layout` | empty — the stem buses (`Music`, `BaseBeat`, `Drums`, `Instruments`, `Vocals`, `SFX`) are created at runtime by `AudioManager` through `AudioServer`, keeping the dynamic mix in one place |
 
-Input Map already defines movement (`move_up/down/left/right`), zoom (`zoom_in`/`zoom_out`),
-fire (`fire`, `fire_missile`, `fire_bomb`), `start` and `pause`, with both WASD and arrow keys.
-Gamepad R1/L1 (shoulder buttons) bindings for zoom are intentionally left to the
-player-movement task so the control work stays in one place.
+Input Map defines movement (`move_up/down/left/right`), zoom (`zoom_in`/`zoom_out`),
+fire (`fire`, `fire_laser`, `fire_missile`, `fire_bomb`), `cycle_speed`, `start`
+and `pause`. There is no in-game weapon cycling: Q/W/E (R2/L2/A) fire Weapons
+1/2/3 directly, while Space (X) is held fire for Weapon 1 only. Keyboard and
+gamepad events follow the design table linked above.
 
 The `ui/` folder from the plan is represented by `scenes/ui/` (HUD scene) and
 `scripts/ui/` (HUD script), following Godot's parallel scenes/scripts convention.
@@ -146,24 +138,3 @@ godot --headless --export-release "Linux" build/linux/retro-shmup.x86_64
 `tools/run_all.sh` fails on GDScript parse errors, on any `tools/validate_*.py` or
 `tests/validate_*.py` failure, on audio asset validation failures and on any
 `tests/*_test.gd` suite that exits non-zero.
-
-CI (`.github/workflows/ci.yml`) runs the script on Godot 4.3 and 4.7.2 and exports
-Linux, Windows and macOS builds with `export_presets.cfg`. Artifacts are named
-`retro-shmup-<version>-<short-sha>-<target>`, where `<version>` is the `v` tag on
-tag pushes and `dev` otherwise; retention is 14 days. Windows/macOS executables
-cannot run on the Linux runner, so those jobs smoke-test the exported `.pck`
-with the Linux engine rather than claiming a native smoke.
-
-## Demo builds
-
-The Phase 1 demo is released as **0.0.1-demo** when the `v0.0.1-demo` tag is
-pushed; the `Release` workflow (`.github/workflows/release.yml`) gates on
-`tools/run_all.sh`, exports the Linux x86_64 build and publishes it to the
-[GitHub Releases page](https://github.com/dipievil/retro-shmup/releases/tag/v0.0.1-demo).
-
-Download `retro-shmup.x86_64` and `retro-shmup.pck` from that release, keep them
-in the same directory and run the binary. `SHA256SUMS` is attached alongside
-them — verify with `sha256sum -c SHA256SUMS` before running. The Phase 1 demo
-covers GDAS-1 movement/zoom and the laser, missile and bomb weapons. The release
-path packages the tagged source as-is: it adds no gameplay, HUD or audio assets.
-
