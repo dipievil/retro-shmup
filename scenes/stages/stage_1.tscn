@@ -1,7 +1,6 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/stages/stage_1.gd" id="1_stage"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/base_enemy.tscn" id="2_enemy"]
 
 [sub_resource type="RectangleShape2D" id="RectShape"]
 size = Vector2(24, 24)
@@ -9,6 +8,8 @@ size = Vector2(24, 24)
 [node name="Stage1" type="Node2D"]
 script = ExtResource("1_stage")
 stage_id = 1
+scroll_speed = 60.0
+auto_scroll = true
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 
