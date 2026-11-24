@@ -37,17 +37,16 @@ func can_fire() -> bool:
 	return ammo > 0 and super.can_fire()
 
 
-## The bomb ignores the ship muzzle: bombs enter from the top and sweep downward
-## across the whole viewport (screen bombardment).
-func _do_fire(_direction: Vector2, _origin: Vector2) -> void:
-	var viewport_size := get_viewport_rect().size
-	var screen_width := viewport_size.x if viewport_size.x > 0.0 else 480.0
-	var margin := 40.0
-	var span := maxf(1.0, screen_width - margin * 2.0)
+## The bomb keeps its limited volley but follows the side-scrolling baseline:
+## every blast leaves the ship's right-facing muzzle and travels right in a
+## tight vertical spread instead of dropping from the top of the screen.
+func _do_fire(direction: Vector2, origin: Vector2) -> void:
+	var travel := direction.normalized() if direction != Vector2.ZERO else Vector2.RIGHT
 	var count := maxi(1, bombs_per_drop)
+	var spacing := 16.0
 	for i in count:
-		var x := margin + span * ((float(i) + 0.5) / float(count))
-		var proj := _spawn_projectile(Vector2.DOWN, Vector2(x, -12.0))
+		var offset_y := (float(i) - (float(count) - 1.0) * 0.5) * spacing
+		var proj := _spawn_projectile(travel, origin + Vector2(0.0, offset_y))
 		if proj is BombProjectile:
 			proj.explosion_radius = explosion_radius
 	ammo -= 1

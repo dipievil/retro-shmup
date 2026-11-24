@@ -89,9 +89,8 @@ func _test_projectiles() -> void:
 		_check(visual != null and visual.texture != null, "%s uses an atlas frame" % kind)
 		_check(projectile.get_node_or_null("FallbackVisual") == null,
 			"%s placeholder removed" % kind)
-		if kind != "bomb":
-			_check(visual != null and is_equal_approx(visual.rotation, -PI / 2.0),
-				"%s art points up" % kind)
+		_check(visual != null and is_equal_approx(visual.rotation, 0.0),
+			"%s art points right at rest" % kind)
 		projectile.queue_free()
 
 

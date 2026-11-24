@@ -14,7 +14,7 @@ script = ExtResource("1_player")
 [node name="Visual" type="AnimatedSprite2D" parent="."]
 
 [node name="MuzzleMarker" type="Marker2D" parent="."]
-position = Vector2(0, -20)
+position = Vector2(20, 0)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_1")

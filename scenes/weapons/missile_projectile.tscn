@@ -12,8 +12,7 @@ script = ExtResource("1_missile")
 weapon_kind = "missile"
 
 [node name="Visual" type="Sprite2D" parent="."]
-; Sheet art points right; shots travel up.
-rotation = -1.5707963
+; Sheet art points right; the missile node rotates to face its travel direction.
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_missile")

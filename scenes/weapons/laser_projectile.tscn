@@ -12,8 +12,7 @@ script = ExtResource("1_proj")
 weapon_kind = "laser"
 
 [node name="Visual" type="Sprite2D" parent="."]
-; Sheet art points right; shots travel up.
-rotation = -1.5707963
+; Sheet art points right and shots travel right; no visual rotation needed.
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_laser")

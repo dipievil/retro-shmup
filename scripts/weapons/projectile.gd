@@ -11,7 +11,7 @@ signal hit(target: Node2D)
 # ---- Exported ----
 @export var speed: float = 600.0
 @export var damage: int = 1
-@export var direction: Vector2 = Vector2.UP
+@export var direction: Vector2 = Vector2.RIGHT
 @export var lifetime: float = 3.0
 @export var is_player_projectile: bool = true
 
