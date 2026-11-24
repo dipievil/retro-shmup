@@ -14,8 +14,9 @@ var target: Node2D = null
 
 func _physics_process(delta: float) -> void:
 	_update_homing(delta)
-	# Sprite points up in the source art; rotate it to face travel direction.
-	rotation = direction.angle() + PI * 0.5
+	# Authored art points right, matching the default travel direction; as the
+	# missile homes, rotate the whole projectile to stay aligned with its path.
+	rotation = direction.angle()
 	super._physics_process(delta)
 
 

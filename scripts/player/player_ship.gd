@@ -331,8 +331,10 @@ func _fire_weapon(wname: String) -> void:
 	if not _weapons.has(wname):
 		return
 	var weapon: Weapon = _weapons[wname]
-	var muzzle := Vector2(position.x, position.y - 20)
-	weapon.fire(Vector2.UP, muzzle)
+	# Side-scroller baseline (game_design.md#perspective): the ship's nose and
+	# every shot point right.
+	var muzzle := Vector2(position.x + 20, position.y)
+	weapon.fire(Vector2.RIGHT, muzzle)
 	var has_fire_frame := (_visual != null and _visual.sprite_frames != null
 		and _visual.sprite_frames.has_animation("fire"))
 	if has_fire_frame and _visual.animation != "fire":

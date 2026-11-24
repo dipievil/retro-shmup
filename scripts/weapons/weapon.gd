@@ -49,7 +49,7 @@ func can_fire() -> bool:
 	return not _is_on_cooldown and projectile_scene != null
 
 
-func fire(direction: Vector2 = Vector2.UP, origin: Vector2 = Vector2.ZERO) -> void:
+func fire(direction: Vector2 = Vector2.RIGHT, origin: Vector2 = Vector2.ZERO) -> void:
 	if not can_fire():
 		return
 	_do_fire(direction, origin)
@@ -73,7 +73,7 @@ func _spawn_projectile(direction: Vector2, origin: Vector2) -> Projectile:
 		push_warning("Weapon: projectile_scene does not instantiate a Projectile")
 		return null
 	# Configure before add_child so _ready() sees the final values.
-	proj.direction = direction.normalized() if direction != Vector2.ZERO else Vector2.UP
+	proj.direction = direction.normalized() if direction != Vector2.ZERO else Vector2.RIGHT
 	proj.damage = damage
 	proj.speed = projectile_speed
 	proj.lifetime = projectile_lifetime
