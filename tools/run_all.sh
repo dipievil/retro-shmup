@@ -144,11 +144,18 @@ while IFS= read -r -u 3 file; do
         suite_args=(--path . "res://${file%.gd}.tscn")
         suite_label="${file%.gd}.tscn"
     fi
-    if run_suite "$GODOT_BIN" --headless "${suite_args[@]}" >"$LOG" 2>&1; then
-        pass "$suite_label"
-    else
-        fail "$suite_label"
+    SUITE_STATUS=0
+    run_suite "$GODOT_BIN" --headless "${suite_args[@]}" >"$LOG" 2>&1 || SUITE_STATUS=$?
+    # Runtime GDScript errors (e.g. a nonexistent SpriteFrames method) do not
+    # necessarily change the exit code, so inspect stderr as well.
+    if grep -qE 'Nonexistent function|SCRIPT ERROR' "$LOG"; then
+        fail "$suite_label printed a script error"
+        grep -nE 'Nonexistent function|SCRIPT ERROR' "$LOG" | head -20 | sed 's/^/        /'
+    elif [ "$SUITE_STATUS" -ne 0 ]; then
+        fail "$suite_label (exit $SUITE_STATUS)"
         tail -30 "$LOG" | sed 's/^/        /'
+    else
+        pass "$suite_label"
     fi
 done 3< <(find tests -maxdepth 1 \( -name '*_test.gd' -o -name 'test_*.gd' \) 2>/dev/null | sort)
 

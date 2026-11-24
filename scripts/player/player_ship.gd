@@ -19,6 +19,7 @@ extends Area2D
 const LaserProjectileScene := preload("res://scenes/weapons/laser_projectile.tscn")
 const MissileProjectileScene := preload("res://scenes/weapons/missile_projectile.tscn")
 const BombProjectileScene := preload("res://scenes/weapons/bomb_projectile.tscn")
+const ExplosionScene := preload("res://scenes/effects/explosion.tscn")
 const _WEAPON_ORDER := ["laser", "missile", "bomb"]
 
 # ---- Signals ----
@@ -411,7 +412,23 @@ func _start_invincibility() -> void:
 	_invincible_timer = _INVINCIBLE_TIME
 
 
+## Public death entry point used when the player rams an enemy (Phase 2):
+## guarantees the same explosion/death path as a normal hull loss.
+func explode() -> void:
+	if is_queued_for_deletion():
+		return
+	_die()
+
+
 func _die() -> void:
+	if is_queued_for_deletion():
+		return
+	var parent := get_parent()
+	if parent != null:
+		var effect := ExplosionScene.instantiate() as Node2D
+		if effect != null:
+			parent.add_child(effect)
+			effect.global_position = global_position
 	destroyed.emit()
 	GameManager.game_over()
 	queue_free()

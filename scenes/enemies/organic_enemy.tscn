@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/organic_enemy.gd" id="1_organic"]
+
+[sub_resource type="RectangleShape2D" id="RectShape"]
+size = Vector2(26, 22)
+
+[node name="OrganicEnemy" type="Area2D"]
+script = ExtResource("1_organic")
+collision_layer = 4
+collision_mask = 3
+max_health = 1
+speed = 90.0
+
+[node name="Visual" type="AnimatedSprite2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectShape")

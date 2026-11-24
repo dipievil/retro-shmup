@@ -12,7 +12,7 @@ var _hud: HUD
 
 func _ready() -> void:
 	_player = $PlayerShip
-	_stage = $StageBase
+	_stage = $Stage1
 	_hud = $HUD
 	GameManager.start_game(start_ship_id)
 	# Greybox: skip menu, go straight to gameplay
