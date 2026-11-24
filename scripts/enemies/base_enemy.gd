@@ -39,15 +39,17 @@ func _physics_process(delta: float) -> void:
 
 ## Virtual: override in subclasses for stage-specific AI behavior.
 func _ai_update(delta: float) -> void:
-	# Default: move downward
-	_velocity = Vector2.DOWN * speed
+	# Side-scrolling baseline: enter from the right and travel left.
+	_velocity = Vector2.LEFT * speed
 
 
 func _constrain_to_screen() -> void:
 	if position.y > 300:
 		queue_free()
-	if position.x < -20 or position.x > 500:
-		_velocity.x *= -1
+	# Offscreen right spawns (x > 480) must survive; left-movers despawn once
+	# they have fully passed the left edge, with no bounce back into view.
+	if position.x < -40 or position.x > 560:
+		queue_free()
 
 
 func take_damage(amount: int) -> void:
@@ -73,4 +75,5 @@ func _on_area_entered(other: Area2D) -> void:
 		proj.queue_free()
 	elif other.is_in_group("player"):
 		var player: PlayerShip = other
-		player.take_damage(contact_damage, position.y < player.position.y)
+		# Front shield faces right, so an enemy to the ship's right is a front hit.
+		player.take_damage(contact_damage, position.x > player.position.x)
