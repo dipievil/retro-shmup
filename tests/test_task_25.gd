@@ -6,6 +6,8 @@ extends Node
 
 const PLAYER_SCENE := "res://scenes/player/player_ship.tscn"
 const BASE_PROJECTILE_SCENE := "res://scenes/weapons/projectile.tscn"
+const LASER_PROJECTILE_SCENE := "res://scenes/weapons/laser_projectile.tscn"
+const MISSILE_PROJECTILE_SCENE := "res://scenes/weapons/missile_projectile.tscn"
 const SHIP_POSITION := Vector2(120.0, 135.0)
 const MUZZLE_X := SHIP_POSITION.x + 20.0
 const LAUNCH_DEPTH := 0.75
@@ -30,6 +32,9 @@ func _run_tests() -> void:
 	_test_defaults()
 	print("[task-25] Fired projectiles")
 	_test_fired_projectiles()
+	print("[task-25] Hitboxes and upgrade spread")
+	_test_hitboxes()
+	_test_upgrade_spread()
 	if _failures.is_empty():
 		print("[task-25] ALL CHECKS PASSED")
 		get_tree().quit(0)
@@ -135,3 +140,60 @@ func _collect_from(node: Node, found: Array[Projectile]) -> void:
 		if child is Projectile:
 			found.append(child)
 		_collect_from(child, found)
+
+
+func _test_hitboxes() -> void:
+	_check_hitbox("laser", LASER_PROJECTILE_SCENE)
+	_check_hitbox("missile", MISSILE_PROJECTILE_SCENE)
+
+
+func _check_hitbox(kind: String, path: String) -> void:
+	var packed := load(path) as PackedScene
+	if packed == null:
+		_check(false, "%s projectile scene loads for hitbox check" % kind)
+		return
+	var shot := packed.instantiate() as Projectile
+	var shape_node := shot.get_node_or_null("CollisionShape2D") as CollisionShape2D
+	var rect: RectangleShape2D = null
+	if shape_node != null:
+		rect = shape_node.shape as RectangleShape2D
+	_check(rect != null and rect.size.x > rect.size.y,
+		"%s hitbox is wider than tall (matches rightward art)" % kind)
+	shot.free()
+
+
+func _test_upgrade_spread() -> void:
+	var packed := load(PLAYER_SCENE) as PackedScene
+	if packed == null:
+		_check(false, "player scene loads for upgrade spread")
+		return
+	var ship := packed.instantiate() as PlayerShip
+	add_child(ship)
+	ship.position = SHIP_POSITION
+	ship.depth = LAUNCH_DEPTH
+	for kind in ["laser", "missile"]:
+		var weapon := ship._weapons.get(kind) as Weapon
+		if weapon == null:
+			_check(false, "%s weapon exists for spread check" % kind)
+			continue
+		for level in [1, 2, 3]:
+			weapon.current_level = level
+			weapon._do_fire(Vector2.RIGHT, Vector2(MUZZLE_X, SHIP_POSITION.y))
+			var shots := _shots_of_kind(_collect_projectiles(), kind)
+			_check(shots.size() == level,
+				"%s level %d fires %d shots" % [kind, level, level])
+			var aligned := true
+			var staggered := true
+			var ys: Array[float] = []
+			for shot in shots:
+				if not is_equal_approx(shot.global_position.x, MUZZLE_X):
+					aligned = false
+				if ys.has(shot.global_position.y):
+					staggered = false
+				ys.append(shot.global_position.y)
+			_check(aligned, "%s level %d keeps shots in the same lane (no X stacking)" % [kind, level])
+			_check(staggered, "%s level %d offsets shots perpendicular to travel" % [kind, level])
+			for shot in shots:
+				shot.free()
+		weapon.current_level = 1
+	ship.free()
