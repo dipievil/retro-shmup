@@ -17,6 +17,7 @@ const PROJECTILE_SCENES := {
 }
 
 var _failures: Array[String] = []
+var _fire_counts: Dictionary = {}
 
 
 func _ready() -> void:
@@ -29,6 +30,10 @@ func _check(ok: bool, label: String) -> void:
 	else:
 		printerr("  FAIL  ", label)
 		_failures.append(label)
+
+
+func _on_weapon_fired(kind: String) -> void:
+	_fire_counts[kind] = int(_fire_counts.get(kind, 0)) + 1
 
 
 func _run_tests() -> void:
@@ -44,6 +49,10 @@ func _run_tests() -> void:
 	_test_input_map()
 	print("[task-23] Speed control")
 	_test_speed_control()
+	print("[task-23] Fire buttons")
+	_test_fire_buttons()
+	print("[task-23] Pause")
+	_test_pause()
 
 	if _failures.is_empty():
 		print("[task-23] ALL CHECKS PASSED")
@@ -175,3 +184,53 @@ func _test_speed_control() -> void:
 	_check(ship.speed_level == 1, "cycle_speed wraps at level 3")
 	GameManager.current_state = GameManager.GameState.MENU
 	ship.queue_free()
+
+
+func _test_fire_buttons() -> void:
+	for action in ["next_weapon", "prev_weapon", "select_laser", "select_missile", "select_bomb"]:
+		_check(not InputMap.has_action(action), "no weapon cycling/selection action: %s" % action)
+
+	var packed := load(PLAYER_SCENE) as PackedScene
+	if packed == null:
+		return
+	var ship := packed.instantiate() as PlayerShip
+	add_child(ship)
+	GameManager.current_state = GameManager.GameState.PLAYING
+	_fire_counts.clear()
+	for kind in ["laser", "missile", "bomb"]:
+		var weapon: Weapon = ship._weapons.get(kind) as Weapon
+		if weapon != null:
+			weapon.fired.connect(_on_weapon_fired.bind(kind))
+
+	var fire_event := InputEventAction.new()
+	fire_event.action = "fire_missile"
+	fire_event.pressed = true
+	ship._input(fire_event)
+	_check(int(_fire_counts.get("missile", 0)) == 1, "W fires the missile directly")
+	_check(int(_fire_counts.get("laser", 0)) == 0, "W does not fire Weapon 1")
+	_check(ship.get_active_weapon() == "laser", "fire buttons never change Weapon 1")
+
+	_fire_counts.clear()
+	Input.action_press("fire")
+	ship._handle_firing()
+	Input.action_release("fire")
+	_check(int(_fire_counts.get("laser", 0)) == 1, "Space held fire uses Weapon 1")
+	_check(int(_fire_counts.get("missile", 0)) == 0, "Space held fire does not cycle")
+	GameManager.current_state = GameManager.GameState.MENU
+	ship.queue_free()
+
+
+func _test_pause() -> void:
+	_check(GameManager.process_mode == Node.PROCESS_MODE_ALWAYS,
+		"GameManager keeps receiving input while paused")
+	GameManager.change_state(GameManager.GameState.PLAYING)
+	var event := InputEventAction.new()
+	event.action = "pause"
+	event.pressed = true
+	GameManager._input(event)
+	_check(GameManager.current_state == GameManager.GameState.PAUSED
+		and get_tree().paused, "Escape pauses the game")
+	GameManager._input(event)
+	_check(GameManager.current_state == GameManager.GameState.PLAYING
+		and not get_tree().paused, "Escape unpauses while the tree is paused")
+	GameManager.change_state(GameManager.GameState.MENU)

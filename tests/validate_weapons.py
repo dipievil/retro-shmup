@@ -4,7 +4,7 @@
 Godot is not always installed in CI/homelab contexts, so this checks the parts
 that can be verified without the engine: scene wiring, resource paths, GDScript
 delimiter balance/unique class names, and the presence of the behaviours the
-game design requires (cadence, homing, bomb ammo, weapon switching, cleanup).
+game design requires (cadence, homing, bomb ammo, direct weapon fire, cleanup).
 
 Run from anywhere:  python3 tests/validate_weapons.py
 """
@@ -59,24 +59,28 @@ BEHAVIOUR_CHECKS = [
     ("scripts/weapons/bomb.gd", r"func can_fire\(\)", "bomb ammo gate"),
     ("scripts/weapons/bomb_projectile.gd", r"explosion_radius", "bomb blast radius"),
     ("scripts/weapons/bomb_projectile.gd", r'call\("take_damage"', "bomb damages enemies"),
-    ("scripts/player/player_ship.gd", r"func switch_weapon\(", "weapon selection"),
-    ("scripts/player/player_ship.gd", r"func cycle_weapon\(", "weapon cycling"),
     ("scripts/player/player_ship.gd", r"Laser\.new\(\)", "laser instantiation"),
     ("scripts/player/player_ship.gd", r"Missile\.new\(\)", "missile instantiation"),
     ("scripts/player/player_ship.gd", r"Bomb\.new\(\)", "bomb instantiation"),
     ("scripts/player/player_ship.gd", r'\bweapon_changed\.emit\(', "HUD weapon signal"),
-    ("project.godot", r"^next_weapon=\{", "next weapon input"),
-    ("project.godot", r"^prev_weapon=\{", "previous weapon input"),
-    ("project.godot", r"^select_laser=\{", "direct laser select"),
-    ("project.godot", r"^select_missile=\{", "direct missile select"),
-    ("project.godot", r"^select_bomb=\{", "direct bomb select"),
+    ("scripts/autoload/game_manager.gd", r"PROCESS_MODE_ALWAYS", "pause input survives pause"),
+    ("scripts/autoload/game_manager.gd", r"func _input\(", "pause input handler"),
+]
+
+FORBIDDEN_PATTERNS = [
+    ("scripts/player/player_ship.gd", r"func (?:switch|cycle)_weapon\(",
+     "weapon selection/cycling removed"),
+    ("scripts/player/player_ship.gd", r'is_action_pressed\("pause"\)',
+     "pause handled by the ALWAYS autoload, not the pausable ship"),
+    ("project.godot",
+     r"^(?:next_weapon|prev_weapon|select_laser|select_missile|select_bomb)=\{",
+     "no weapon cycling/selection input"),
 ]
 
 INPUT_ACTIONS_USED = [
     "move_left", "move_right", "move_up", "move_down",
     "zoom_in", "zoom_out", "fire", "fire_laser", "fire_missile", "fire_bomb",
-    "next_weapon", "prev_weapon", "select_laser", "select_missile",
-    "select_bomb", "cycle_speed", "pause", "start",
+    "cycle_speed", "pause", "start",
 ]
 
 
@@ -245,6 +249,11 @@ def main() -> int:
         text = project_text if rel == "project.godot" else read(rel)
         if not re.search(pattern, text, re.M):
             ERRORS.append(f"{rel}: missing {label} (/{pattern}/)")
+
+    for rel, pattern, label in FORBIDDEN_PATTERNS:
+        text = project_text if rel == "project.godot" else read(rel)
+        if re.search(pattern, text, re.M):
+            ERRORS.append(f"{rel}: forbidden {label} (/{pattern}/)")
 
     check_depth_propagation()
 

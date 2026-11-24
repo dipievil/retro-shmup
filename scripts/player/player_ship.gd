@@ -17,7 +17,6 @@ extends Area2D
 const LaserProjectileScene := preload("res://scenes/weapons/laser_projectile.tscn")
 const MissileProjectileScene := preload("res://scenes/weapons/missile_projectile.tscn")
 const BombProjectileScene := preload("res://scenes/weapons/bomb_projectile.tscn")
-const _WEAPON_ORDER := ["laser", "missile", "bomb"]
 const _SHIP_SHEET := "res://assets/sprites/player/gdas1_sheet.png"
 const _SHIP_METADATA := "res://assets/sprites/player/gdas1_sheet.json"
 
@@ -74,6 +73,8 @@ var max_speed_level: int = 3
 
 # ---- Internal: Weapons ----
 var _weapons: Dictionary = {}  # weapon_name -> Weapon node
+# Weapon 1 is the held-fire weapon (laser for GDAS-1). Q/W/E fire directly and
+# never change this slot: the design has no in-game weapon cycling.
 var _active_weapon: String = "laser"
 
 # ---- Internal: State ----
@@ -119,7 +120,7 @@ func _setup_weapons() -> void:
 		if weapon_node:
 			add_child(weapon_node)
 			_weapons[wname] = weapon_node
-	# Ships without the laser (future loadouts) still get a valid active weapon.
+	# Ships without the laser (future loadouts) still get a valid Weapon 1.
 	if not _weapons.has(_active_weapon) and not _weapons.is_empty():
 		_active_weapon = _weapons.keys()[0]
 
@@ -312,19 +313,10 @@ func _apply_depth_visuals() -> void:
 
 # ---- Firing ----
 func _handle_firing() -> void:
-	# Held fire uses the active weapon; each Weapon enforces its own cadence.
+	# Space (gamepad X) is held fire for Weapon 1 only; each Weapon enforces its
+	# own cadence. Direct Q/W/E (R2/L2/A) fire is handled in _input().
 	if Input.is_action_pressed("fire"):
 		_fire_weapon(_active_weapon)
-	# Q/W/E fire and select a weapon directly (gamepad R2/L2/A).
-	if Input.is_action_just_pressed("fire_laser") and _weapons.has("laser"):
-		switch_weapon("laser")
-		_fire_weapon("laser")
-	if Input.is_action_just_pressed("fire_missile") and _weapons.has("missile"):
-		switch_weapon("missile")
-		_fire_weapon("missile")
-	if Input.is_action_just_pressed("fire_bomb") and _weapons.has("bomb"):
-		switch_weapon("bomb")
-		_fire_weapon("bomb")
 
 
 func _fire_weapon(wname: String) -> void:
@@ -341,30 +333,7 @@ func _fire_weapon(wname: String) -> void:
 		_visual.play("fire")
 
 
-func switch_weapon(wname: String) -> void:
-	if not _weapons.has(wname) or _active_weapon == wname:
-		return
-	_active_weapon = wname
-	var weapon: Weapon = _weapons[wname]
-	GameManager.weapon_changed.emit(wname, weapon.current_level)
-
-
-## Cycles through only the weapons this ship actually carries.
-func cycle_weapon(step: int) -> void:
-	var available: Array[String] = []
-	for wname in _WEAPON_ORDER:
-		if _weapons.has(wname):
-			available.append(wname)
-	if available.is_empty():
-		return
-	var index := available.find(_active_weapon)
-	if index < 0:
-		index = 0
-	else:
-		index = wrapi(index + step, 0, available.size())
-	switch_weapon(available[index])
-
-
+## Weapon 1 (the held-fire slot). It is never changed by the fire buttons.
 func get_active_weapon() -> String:
 	return _active_weapon
 
@@ -464,24 +433,24 @@ func _on_area_entered(other: Area2D) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause"):
-		if GameManager.current_state == GameManager.GameState.PLAYING:
-			GameManager.change_state(GameManager.GameState.PAUSED)
-		elif GameManager.current_state == GameManager.GameState.PAUSED:
-			GameManager.change_state(GameManager.GameState.PLAYING)
+	# Pause is handled by GameManager (PROCESS_MODE_ALWAYS): this ship's input
+	# callbacks stop firing while the tree is paused, so Escape cannot unpause
+	# from here.
 	if GameManager.current_state != GameManager.GameState.PLAYING:
 		return
+	# Q/W/E (R2/L2/A) fire their weapon directly. No selection or cycling: the
+	# held-fire Weapon 1 slot stays on the laser for the whole demo. is_echo()
+	# keeps OS key repeat from turning a single press into auto-fire.
+	if _is_new_press(event, "fire_laser"):
+		_fire_weapon("laser")
+	elif _is_new_press(event, "fire_missile"):
+		_fire_weapon("missile")
+	elif _is_new_press(event, "fire_bomb"):
+		_fire_weapon("bomb")
 	# GDAS-1 has three speed levels (docs/game_design.md), cycled with C/Y.
-	if event.is_action_pressed("cycle_speed"):
+	if _is_new_press(event, "cycle_speed"):
 		_cycle_speed()
-	# Weapon switching: cycle with R/T, direct select with 1/2/3.
-	if event.is_action_pressed("next_weapon"):
-		cycle_weapon(1)
-	elif event.is_action_pressed("prev_weapon"):
-		cycle_weapon(-1)
-	elif event.is_action_pressed("select_laser"):
-		switch_weapon("laser")
-	elif event.is_action_pressed("select_missile"):
-		switch_weapon("missile")
-	elif event.is_action_pressed("select_bomb"):
-		switch_weapon("bomb")
+
+
+func _is_new_press(event: InputEvent, action: String) -> bool:
+	return event.is_action_pressed(action) and not event.is_echo()

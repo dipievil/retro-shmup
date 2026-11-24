@@ -31,9 +31,10 @@ The control table is owned by the parent repository:
 | Audio | `audio/buses/default_bus_layout` | empty — the stem buses (`Music`, `BaseBeat`, `Drums`, `Instruments`, `Vocals`, `SFX`) are created at runtime by `AudioManager` through `AudioServer`, keeping the dynamic mix in one place |
 
 Input Map defines movement (`move_up/down/left/right`), zoom (`zoom_in`/`zoom_out`),
-fire (`fire`, `fire_laser`, `fire_missile`, `fire_bomb`), weapon selection/cycling,
-`cycle_speed`, `start` and `pause`. Keyboard and gamepad events follow the design
-table linked above.
+fire (`fire`, `fire_laser`, `fire_missile`, `fire_bomb`), `cycle_speed`, `start`
+and `pause`. There is no in-game weapon cycling: Q/W/E (R2/L2/A) fire Weapons
+1/2/3 directly, while Space (X) is held fire for Weapon 1 only. Keyboard and
+gamepad events follow the design table linked above.
 
 The `ui/` folder from the plan is represented by `scenes/ui/` (HUD scene) and
 `scripts/ui/` (HUD script), following Godot's parallel scenes/scripts convention.

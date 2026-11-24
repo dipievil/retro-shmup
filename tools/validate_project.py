@@ -147,6 +147,7 @@ for action in (
     "zoom_in",
     "zoom_out",
     "fire",
+    "fire_laser",
     "fire_missile",
     "fire_bomb",
     "start",
