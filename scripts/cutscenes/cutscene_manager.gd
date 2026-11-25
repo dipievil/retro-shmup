@@ -33,6 +33,16 @@ func _ready() -> void:
 
 func _connect_signals() -> void:
 	AudioManager.bar_triggered.connect(_on_bar)
+	cutscene_started.connect(_on_cutscene_started_audio)
+	cutscene_finished.connect(_on_cutscene_finished_audio)
+
+
+func _on_cutscene_started_audio(_id: String) -> void:
+	AudioManager.on_event(AudioManager.EVENT_CUTSCENE_START)
+
+
+func _on_cutscene_finished_audio(_id: String) -> void:
+	AudioManager.on_event(AudioManager.EVENT_CUTSCENE_END)
 
 
 func _build_ui() -> void:

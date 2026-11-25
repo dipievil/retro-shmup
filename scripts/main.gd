@@ -17,6 +17,7 @@ func _ready() -> void:
 	GameManager.start_game(start_ship_id)
 	# Greybox: skip menu, go straight to gameplay
 	GameManager.change_state(GameManager.GameState.PLAYING)
+	AudioManager.play_default_music()
 	_spawn_test_wave()
 
 

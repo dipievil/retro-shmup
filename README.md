@@ -78,6 +78,39 @@ retro-shmup/
 - **GameManager**: Game state, stage progression, score, ship data, signal bus
 - **AudioManager**: Layered audio via AudioServer buses (base beat, drums, instruments, vocals, SFX)
 
+### Dynamic audio API
+
+`AudioManager` owns one `AudioStreamPlayer` per stem and routes each through its
+own `AudioServer` bus (`BaseBeat`, `Drums`, `Instruments`, `Vocals` → `Music`;
+`SFX` → `Master`). The base beat loops for the whole game; drum/vocal volume is
+mixed by tweening the corresponding bus. All task-[3.1] stems are 16 beats at
+140 BPM, so the engine keeps them phase-aligned — no stream is retimed. Beat and
+bar signals come from the base player's playback position, not wall-clock time.
+
+| Call | Purpose |
+|---|---|
+| `load_stems()` | Load `res://assets/audio/music/{base_beat,drums,vocals}.wav`; returns a `stem -> loaded` dictionary. Missing files mark the layer unavailable and are skipped, never logged as errors. |
+| `play_default_music()` | Start the base loop and every available stem together, with the initial stage mix. `main.gd` calls this on startup; tests call it explicitly. |
+| `set_layer(stem, db, fade=-1)` | Tween a stem bus to `db` and return the `Tween`. `fade < 0` uses `default_fade` (1.2 s); `fade == 0` is immediate. |
+| `get_layer_db(stem)` | Read the current bus volume in dB. |
+| `on_event(event, fade=-1)` | Apply a named mix preset to all *available* stems. |
+| `play_sfx(stream, db=0)` | One-shot SFX on the SFX bus (never loops). |
+| `stop_music()` | Stop all music players. |
+
+Event names are `AudioManager.EVENT_*`: `stage_start`, `enemy_spawned`,
+`enemy_destroyed`, `player_hit`, `stage_clear`, `cutscene_start`, `cutscene_end`,
+`game_over`. Presets live in `MIXES` in
+`scripts/autoload/audio_manager.gd`: the base beat stays at 0 dB, drums ride
+the action (quiet in cutscenes/at stage clear, loud during waves), and vocals
+fade in for cutscenes. Wiring is in `stage_base.gd` (stage start, enemy
+spawn/death, stage complete), `cutscene_manager.gd` (cutscene start/end) and the
+`GameManager` signal handlers inside `AudioManager` (stage change, damage,
+death, state changes). The `Instruments` layer is created for future assets but
+has no stem on `dev`, so it is skipped by the same path as any missing file.
+
+Headless checks live in `tests/test_audio_manager.gd` (scene-based, so the
+autoloads exist) and cover looping, event mix tweens and missing stems.
+
 ### Core Systems
 
 - **Player Ship** (`player_ship.gd`): Movement, depth/zoom layers, damage control (hull + front/back shields), weapon management

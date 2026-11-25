@@ -27,6 +27,10 @@ func _ready() -> void:
 	_find_parallax()
 	_build_spawn_queue()
 	GameManager.current_stage_node = self
+	# Dynamic audio: stage/wave events already emitted by this controller.
+	stage_started.connect(_on_stage_started_audio)
+	enemy_spawned.connect(_on_enemy_spawned_audio)
+	stage_complete.connect(_on_stage_complete_audio)
 	stage_started.emit()
 
 
@@ -95,6 +99,19 @@ func _spawn_enemy(scene: PackedScene, pos: Vector2, depth_val: float) -> void:
 
 func _on_enemy_died(_score: int) -> void:
 	_enemy_count -= 1
+	AudioManager.on_event(AudioManager.EVENT_ENEMY_DESTROYED)
+
+
+func _on_stage_started_audio() -> void:
+	AudioManager.on_event(AudioManager.EVENT_STAGE_START)
+
+
+func _on_enemy_spawned_audio(_enemy: BaseEnemy) -> void:
+	AudioManager.on_event(AudioManager.EVENT_ENEMY_SPAWNED)
+
+
+func _on_stage_complete_audio() -> void:
+	AudioManager.on_event(AudioManager.EVENT_STAGE_CLEAR)
 
 
 # ---- Layer/Depth ----
