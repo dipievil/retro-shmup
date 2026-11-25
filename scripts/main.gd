@@ -3,6 +3,8 @@ extends Node2D
 ## Main entry point. Orchestrates stage, player, HUD, and cutscenes.
 ## For the greybox prototype, starts directly in PLAYING state.
 
+const KamikazeScene := preload("res://scenes/enemies/kamikaze_enemy.tscn")
+
 @export var start_ship_id: String = "gdas_1"
 
 var _player: PlayerShip
@@ -28,6 +30,18 @@ func _spawn_test_wave() -> void:
 		enemy.position = Vector2(80 + i * 80, -40 - i * 30)
 		enemy.depth = 0.5
 		add_child(enemy)
+	_spawn_kamikaze_wave()
+
+
+## Phase 2 [2.3]: kamikazes enter from the top at varied x positions. This is
+## deliberately independent of the unmerged stage-1 parallax scene.
+func _spawn_kamikaze_wave() -> void:
+	var view_size := get_viewport_rect().size
+	for i in range(3):
+		var kamikaze: KamikazeEnemy = KamikazeScene.instantiate()
+		kamikaze.position = KamikazeEnemy.spawn_position(i, view_size)
+		kamikaze.depth = 0.5
+		add_child(kamikaze)
 
 
 func _input(event: InputEvent) -> void:

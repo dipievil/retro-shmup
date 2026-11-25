@@ -83,6 +83,7 @@ retro-shmup/
 - **Player Ship** (`player_ship.gd`): Movement, depth/zoom layers, damage control (hull + front/back shields), weapon management
 - **Weapon System** (`weapon.gd`, `laser.gd`, `projectile.gd`): Base weapon class with fire rate, cooldown, upgrade levels
 - **Enemy System** (`base_enemy.gd`): Virtual AI interface, health, depth/layer support
+- **Kamikaze Enemy** (`kamikaze_enemy.gd`): Phase 2 top-down 15-degree dive; ramming destroys both ships and plays the shared player explosion effect (`player_explosion.tscn`)
 - **Stage System** (`stage_base.gd`): Parallax scrolling, enemy spawning queue, layer scaling
 - **HUD** (`hud.gd`): Hull/shield bars, score, stage, weapon display
 - **Cutscene Manager** (`cutscene_manager.gd`): Phantasy Star-style dialogue panels, typewriter effect, bar-synced animations
